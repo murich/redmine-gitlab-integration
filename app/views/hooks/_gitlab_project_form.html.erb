@@ -1,0 +1,15 @@
+<fieldset class="box tabular" id="gitlab_integration">
+  <legend>GitLab Integration</legend>
+  <p>
+    <%= check_box_tag 'create_gitlab_project', '1', true, id: 'create_gitlab_project' %>
+    <label for="create_gitlab_project">Create GitLab project</label>
+  </p>
+  <p>
+    <%= check_box_tag 'create_gitlab_repository', '1', true, id: 'create_gitlab_repository' %>
+    <label for="create_gitlab_repository">Create GitLab repository</label>
+  </p>
+  <p>
+    <%= check_box_tag 'gitlab_project_public', '1', false, id: 'gitlab_project_public' %>
+    <label for="gitlab_project_public">Make GitLab project public</label>
+  </p>
+</fieldset>
