@@ -2,14 +2,16 @@
   <legend>GitLab Integration</legend>
 
   <p>
-    <label for="gitlab_group_id">GitLab Group</label>
+    <label for="gitlab_group_id">GitLab Group <span class="required">*</span></label>
     <%= select_tag 'gitlab_group_id',
         options_for_select(
-          [['➕ Create new group...', 'new']] + (@gitlab_groups&.map { |g| [g['name'], g['id']] } || []),
+          [['-- Select a group or create new --', '']] +
+          [['➕ Create new group...', 'new']] +
+          (@gitlab_groups&.map { |g| [g['name'], g['id']] } || []),
           @selected_group_id
         ),
-        include_blank: 'No group (create project without group)',
-        id: 'gitlab_group_id' %>
+        id: 'gitlab_group_id',
+        required: true %>
     <div id="gitlab_group_notice">
       <% if @inherited_from %>
         <span class="info">📋 Inherited from parent: <%= @inherited_from.name %></span>
@@ -42,11 +44,36 @@
   const newGroupField = document.getElementById('new_group_name_field');
   const newGroupNameInput = document.getElementById('new_group_name');
   const projectNameInput = document.getElementById('project_name');
+  const createRepoCheckbox = document.getElementById('create_gitlab_repository');
+  const projectForm = document.querySelector('form#new_project, form[id^="edit_project"]');
 
   if (!groupDropdown) return;
 
   let userSelectedGroup = false;
   let userEditedGroupName = false;
+
+  // Form submission validation
+  if (projectForm) {
+    projectForm.addEventListener('submit', function(e) {
+      if (createRepoCheckbox && createRepoCheckbox.checked) {
+        const selectedGroup = groupDropdown.value;
+
+        if (!selectedGroup || selectedGroup === '') {
+          e.preventDefault();
+          alert('Please select a GitLab Group or create a new one');
+          groupDropdown.focus();
+          return false;
+        }
+
+        if (selectedGroup === 'new' && (!newGroupNameInput.value || newGroupNameInput.value.trim() === '')) {
+          e.preventDefault();
+          alert('Please enter a name for the new GitLab group');
+          newGroupNameInput.focus();
+          return false;
+        }
+      }
+    });
+  }
 
   // GitLab group name sanitization
   function sanitizeGroupName(name) {

@@ -6,7 +6,8 @@ module RedmineGitlabIntegration
       def self.included(base)
         base.class_eval do
           before_action :capture_gitlab_params, only: [:create]
-          
+          before_action :validate_gitlab_group, only: [:create]
+
           Rails.logger.info "[GITLAB DEBUG] ProjectsController patch applied with before_action"
         end
         Rails.logger.info "[GITLAB DEBUG] ProjectsController patch included"
@@ -34,19 +35,75 @@ module RedmineGitlabIntegration
 
       private
 
+      def validate_gitlab_group
+        Rails.logger.info "[GITLAB DEBUG] Validating GitLab group selection"
+        Rails.logger.info "[GITLAB DEBUG] create_gitlab_repository: #{params[:create_gitlab_repository].inspect}"
+        Rails.logger.info "[GITLAB DEBUG] gitlab_group_id: #{params[:gitlab_group_id].inspect}"
+
+        # Check if GitLab repository creation is requested
+        if params[:create_gitlab_repository].present?
+          gitlab_group_id = params[:gitlab_group_id]
+
+          if gitlab_group_id.blank?
+            Rails.logger.error "[GITLAB DEBUG] Validation failed: GitLab group not selected"
+
+            # Build project with submitted data to show errors
+            @project = Project.new
+            @project.safe_attributes = params[:project]
+            @project.errors.add(:base, 'GitLab Group must be selected when creating a GitLab repository')
+
+            # Prepare form data for re-rendering
+            prepare_gitlab_form_data
+
+            flash.now[:error] = 'GitLab Group must be selected when creating a GitLab repository'
+            render action: 'new', status: :unprocessable_entity
+            return # This halts the before_action chain
+          end
+
+          # If "new" group is selected, validate group name
+          if gitlab_group_id == 'new' && params[:new_group_name].blank?
+            Rails.logger.error "[GITLAB DEBUG] Validation failed: New group name not provided"
+
+            @project = Project.new
+            @project.safe_attributes = params[:project]
+            @project.errors.add(:base, 'New Group Name is required when creating a new GitLab group')
+
+            prepare_gitlab_form_data
+
+            flash.now[:error] = 'New Group Name is required when creating a new GitLab group'
+            render action: 'new', status: :unprocessable_entity
+            return
+          end
+
+          Rails.logger.info "[GITLAB DEBUG] GitLab group validation passed: #{gitlab_group_id}"
+        end
+      end
+
+      def prepare_gitlab_form_data
+        # Fetch GitLab groups to populate dropdown
+        begin
+          gitlab_service = RedmineGitlabIntegration::GitlabService.new
+          @gitlab_groups = gitlab_service.list_groups
+          @selected_group_id = params[:gitlab_group_id]
+        rescue => e
+          Rails.logger.error "[GITLAB DEBUG] Error fetching groups for form: #{e.message}"
+          @gitlab_groups = []
+        end
+      end
+
       def capture_gitlab_params
         Rails.logger.info "[GITLAB DEBUG] Capturing GitLab parameters from request"
-        
+
         if params[:create_gitlab_project].present?
           Rails.logger.info "[GITLAB DEBUG] Setting @create_gitlab_project = true"
           @create_gitlab_project = true
         end
-        
+
         if params[:create_gitlab_repository].present?
-          Rails.logger.info "[GITLAB DEBUG] Setting @create_gitlab_repository = true"  
+          Rails.logger.info "[GITLAB DEBUG] Setting @create_gitlab_repository = true"
           @create_gitlab_repository = true
         end
-        
+
         # Store in project instance if it exists
         if @project
           @project.instance_variable_set(:@create_gitlab_project, @create_gitlab_project)
