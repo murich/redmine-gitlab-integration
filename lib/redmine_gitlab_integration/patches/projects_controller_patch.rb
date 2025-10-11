@@ -5,6 +5,7 @@ module RedmineGitlabIntegration
     module ProjectsControllerPatch
       def self.included(base)
         base.class_eval do
+          before_action :fetch_gitlab_groups, only: [:new, :create]
           before_action :capture_gitlab_params, only: [:create]
           before_action :validate_gitlab_group, only: [:create]
 
@@ -34,6 +35,18 @@ module RedmineGitlabIntegration
       end
 
       private
+
+      def fetch_gitlab_groups
+        Rails.logger.info "[GITLAB DEBUG] Fetching GitLab groups for form"
+        begin
+          gitlab_service = RedmineGitlabIntegration::GitlabService.new
+          @gitlab_groups = gitlab_service.list_groups
+          Rails.logger.info "[GITLAB DEBUG] Fetched #{@gitlab_groups.count} groups"
+        rescue => e
+          Rails.logger.error "[GITLAB DEBUG] Error fetching groups: #{e.message}"
+          @gitlab_groups = []
+        end
+      end
 
       def validate_gitlab_group
         Rails.logger.info "[GITLAB DEBUG] Validating GitLab group selection"
@@ -104,10 +117,18 @@ module RedmineGitlabIntegration
           @create_gitlab_repository = true
         end
 
+        # Capture group selection
+        @gitlab_group_id = params[:gitlab_group_id]
+        @new_group_name = params[:new_group_name]
+
+        Rails.logger.info "[GITLAB DEBUG] Group ID: #{@gitlab_group_id}, New group name: #{@new_group_name}"
+
         # Store in project instance if it exists
         if @project
           @project.instance_variable_set(:@create_gitlab_project, @create_gitlab_project)
           @project.instance_variable_set(:@create_gitlab_repository, @create_gitlab_repository)
+          @project.instance_variable_set(:@gitlab_group_id, @gitlab_group_id)
+          @project.instance_variable_set(:@new_group_name, @new_group_name)
           Rails.logger.info "[GITLAB DEBUG] Stored GitLab params in project instance"
         end
       end

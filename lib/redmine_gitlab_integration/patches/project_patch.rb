@@ -172,6 +172,25 @@ module RedmineGitlabIntegration
 
       def create_gitlab_project_via_api(client)
         begin
+          # Get group parameters from instance variables (set by controller)
+          group_id = instance_variable_get(:@gitlab_group_id)
+          new_group_name = instance_variable_get(:@new_group_name)
+
+          Rails.logger.info "[GITLAB DEBUG] Group ID from instance: #{group_id}, New group name: #{new_group_name}"
+
+          # If creating new group, create it first
+          if group_id == 'new' && new_group_name.present?
+            Rails.logger.info "[GITLAB DEBUG] Creating new GitLab group: #{new_group_name}"
+            group_result = create_gitlab_group(client, new_group_name)
+            if group_result && group_result['id']
+              group_id = group_result['id']
+              Rails.logger.info "[GITLAB DEBUG] New group created with ID: #{group_id}"
+            else
+              Rails.logger.error "[GITLAB DEBUG] Failed to create new group"
+              return nil
+            end
+          end
+
           uri = URI("#{client[:url]}/api/v4/projects")
           http = Net::HTTP.new(uri.host, uri.port)
           http.read_timeout = 30
@@ -188,6 +207,12 @@ module RedmineGitlabIntegration
             visibility: 'private',
             initialize_with_readme: true
           }
+
+          # Add namespace_id if group was selected
+          if group_id.present? && group_id != 'new'
+            project_data[:namespace_id] = group_id.to_i
+            Rails.logger.info "[GITLAB DEBUG] Adding namespace_id: #{group_id}"
+          end
 
           request.body = project_data.to_json
           Rails.logger.info "[GITLAB DEBUG] Creating GitLab project with data: #{project_data.inspect}"
@@ -208,6 +233,47 @@ module RedmineGitlabIntegration
         rescue => e
           Rails.logger.error "[GITLAB DEBUG] Error creating GitLab project: #{e.message}"
           Rails.logger.error "[GITLAB DEBUG] Backtrace: #{e.backtrace.first(3).join("\n")}"
+          return nil
+        end
+      end
+
+      def create_gitlab_group(client, group_name)
+        begin
+          group_path = group_name.downcase.gsub(/[^a-z0-9\-_]/, '-')
+
+          uri = URI("#{client[:url]}/api/v4/groups")
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.read_timeout = 30
+          http.open_timeout = 10
+
+          request = Net::HTTP::Post.new(uri)
+          request['Private-Token'] = client[:token]
+          request['Content-Type'] = 'application/json'
+
+          group_data = {
+            name: group_name,
+            path: group_path,
+            visibility: 'private'
+          }
+
+          request.body = group_data.to_json
+          Rails.logger.info "[GITLAB DEBUG] Creating GitLab group with data: #{group_data.inspect}"
+
+          response = http.request(request)
+          Rails.logger.info "[GITLAB DEBUG] Group creation response code: #{response.code}"
+          Rails.logger.info "[GITLAB DEBUG] Group creation response body: #{response.body}"
+
+          if response.code.to_i.between?(200, 299)
+            group = JSON.parse(response.body)
+            Rails.logger.info "[GITLAB DEBUG] GitLab group created successfully: #{group['name']}"
+            return group
+          else
+            Rails.logger.error "[GITLAB DEBUG] Failed to create GitLab group: #{response.body}"
+            return nil
+          end
+
+        rescue => e
+          Rails.logger.error "[GITLAB DEBUG] Error creating GitLab group: #{e.message}"
           return nil
         end
       end
