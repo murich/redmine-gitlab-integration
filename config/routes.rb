@@ -1,0 +1,4 @@
+get 'gitlab_mappings', to: 'gitlab_mappings#index'
+get 'gitlab_mappings/data', to: 'gitlab_mappings#graph_data'
+post 'gitlab_mappings/update', to: 'gitlab_mappings#update'
+get 'gitlab_mappings/fetch_parent_group', to: 'gitlab_mappings#fetch_parent_group'

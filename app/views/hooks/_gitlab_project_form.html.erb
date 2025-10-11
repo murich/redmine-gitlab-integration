@@ -1,15 +1,157 @@
 <fieldset class="box tabular" id="gitlab_integration">
   <legend>GitLab Integration</legend>
+
   <p>
-    <%= check_box_tag 'create_gitlab_project', '1', true, id: 'create_gitlab_project' %>
-    <label for="create_gitlab_project">Create GitLab project</label>
+    <label for="gitlab_group_id">GitLab Group</label>
+    <%= select_tag 'gitlab_group_id',
+        options_for_select(
+          [['➕ Create new group...', 'new']] + (@gitlab_groups&.map { |g| [g['name'], g['id']] } || []),
+          @selected_group_id
+        ),
+        include_blank: 'No group (create project without group)',
+        id: 'gitlab_group_id' %>
+    <div id="gitlab_group_notice">
+      <% if @inherited_from %>
+        <span class="info">📋 Inherited from parent: <%= @inherited_from.name %></span>
+      <% end %>
+    </div>
   </p>
+
+  <p id="new_group_name_field" style="display: none;">
+    <label for="new_group_name">New Group Name</label>
+    <%= text_field_tag 'new_group_name', '', placeholder: 'Enter group name (auto-filled from project name)', id: 'new_group_name', class: 'text' %>
+    <em class="info" style="font-size: 11px; color: #666;">GitLab group path will be auto-generated from this name</em>
+  </p>
+
   <p>
     <%= check_box_tag 'create_gitlab_repository', '1', true, id: 'create_gitlab_repository' %>
     <label for="create_gitlab_repository">Create GitLab repository</label>
   </p>
+
   <p>
     <%= check_box_tag 'gitlab_project_public', '1', false, id: 'gitlab_project_public' %>
     <label for="gitlab_project_public">Make GitLab project public</label>
   </p>
 </fieldset>
+
+<%= javascript_tag do %>
+(function() {
+  const parentDropdown = document.getElementById('project_parent_id');
+  const groupDropdown = document.getElementById('gitlab_group_id');
+  const noticeDiv = document.getElementById('gitlab_group_notice');
+  const newGroupField = document.getElementById('new_group_name_field');
+  const newGroupNameInput = document.getElementById('new_group_name');
+  const projectNameInput = document.getElementById('project_name');
+
+  if (!groupDropdown) return;
+
+  let userSelectedGroup = false;
+  let userEditedGroupName = false;
+
+  // GitLab group name sanitization
+  function sanitizeGroupName(name) {
+    if (!name) return '';
+    return name
+      .trim()
+      .replace(/[^a-zA-Z0-9\s._-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/[-._]{2,}/g, '-')
+      .replace(/^[-._]+|[-._]+$/g, '');
+  }
+
+  // Auto-populate group name from project name
+  if (projectNameInput && newGroupNameInput) {
+    projectNameInput.addEventListener('input', function() {
+      if (!userEditedGroupName && groupDropdown.value === 'new') {
+        newGroupNameInput.value = sanitizeGroupName(this.value);
+      }
+    });
+
+    newGroupNameInput.addEventListener('input', function() {
+      userEditedGroupName = true;
+    });
+  }
+
+  // Handle "Create new group" option
+  groupDropdown.addEventListener('change', function() {
+    userSelectedGroup = true;
+
+    if (this.value === 'new') {
+      newGroupField.style.display = 'block';
+      if (!userEditedGroupName && projectNameInput && projectNameInput.value) {
+        newGroupNameInput.value = sanitizeGroupName(projectNameInput.value);
+      }
+    } else {
+      newGroupField.style.display = 'none';
+      userEditedGroupName = false;
+    }
+  });
+
+  // Handle parent project change
+  if (parentDropdown) {
+    parentDropdown.addEventListener('change', function() {
+      const parentId = this.value;
+      if (!parentId) {
+        groupDropdown.value = '';
+        noticeDiv.innerHTML = '';
+        return;
+      }
+
+      if (userSelectedGroup) {
+        checkGroupConflict(parentId);
+        return;
+      }
+
+      fetch('/gitlab_mappings/fetch_parent_group?project_id=' + parentId)
+        .then(res => res.json())
+        .then(data => {
+          if (data.group_id) {
+            groupDropdown.value = data.group_id;
+            noticeDiv.innerHTML = '<span class="info">📋 Inherited from: ' + data.inherited_from + '</span>';
+          } else {
+            groupDropdown.value = '';
+            noticeDiv.innerHTML = '';
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching parent group:', err);
+        });
+    });
+  }
+
+  function checkGroupConflict(parentId) {
+    const selectedGroupId = groupDropdown.value;
+    if (selectedGroupId === 'new' || selectedGroupId === '') return;
+
+    fetch('/gitlab_mappings/fetch_parent_group?project_id=' + parentId)
+      .then(res => res.json())
+      .then(data => {
+        if (data.group_id && data.group_id != selectedGroupId) {
+          noticeDiv.innerHTML = '<span class="warning">⚠️ Parent project uses different GitLab Group</span>';
+        } else {
+          noticeDiv.innerHTML = '';
+        }
+      })
+      .catch(err => {
+        console.error('Error checking group conflict:', err);
+      });
+  }
+})();
+<% end %>
+
+<style>
+#gitlab_group_notice {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+#gitlab_group_notice .info {
+  color: #4A90E2;
+  font-style: italic;
+}
+
+#gitlab_group_notice .warning {
+  color: #FF6B6B;
+  font-weight: bold;
+}
+</style>
