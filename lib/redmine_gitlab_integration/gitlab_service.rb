@@ -3,9 +3,12 @@ module RedmineGitlabIntegration
     include HTTParty
     
     def initialize
-      @gitlab_url = Setting.plugin_redmine_gitlab_integration['gitlab_url'] || 'http://gitlab_app'
-      @gitlab_token = Setting.plugin_redmine_gitlab_integration['gitlab_token'] || ''
+      # Prefer environment variables over plugin settings for easier deployment
+      @gitlab_url = ENV['GITLAB_API_URL'] || Setting.plugin_redmine_gitlab_integration['gitlab_url'] || 'http://gitlab_app'
+      @gitlab_token = ENV['GITLAB_API_TOKEN'] || Setting.plugin_redmine_gitlab_integration['gitlab_token'] || ''
       @gitlab_namespace = Setting.plugin_redmine_gitlab_integration['gitlab_namespace'] || ''
+
+      Rails.logger.info "[GITLAB SERVICE] Initialized with URL: #{@gitlab_url}, Token present: #{@gitlab_token.present?}"
     end
     
     # List all accessible groups

@@ -151,11 +151,11 @@ module RedmineGitlabIntegration
           require 'json'
           require 'uri'
 
-          gitlab_url = 'http://gitlab_app'  # Internal Docker network URL
-          gitlab_token = get_gitlab_root_token
+          gitlab_url = ENV['GITLAB_API_URL'] || 'http://gitlab_app'
+          gitlab_token = ENV['GITLAB_API_TOKEN'] || get_gitlab_root_token
 
           Rails.logger.info "[GITLAB DEBUG] Connecting to GitLab at: #{gitlab_url}"
-          Rails.logger.info "[GITLAB DEBUG] Using token: #{gitlab_token ? 'Present' : 'Missing'}"
+          Rails.logger.info "[GITLAB DEBUG] Using token: #{gitlab_token.present? ? 'Present' : 'Missing'}"
 
           return { url: gitlab_url, token: gitlab_token }
         rescue => e
@@ -165,9 +165,8 @@ module RedmineGitlabIntegration
       end
 
       def get_gitlab_root_token
-        # For now, use a hardcoded token - in production this should be from environment or secure storage
-        # This token needs to be generated after GitLab setup
-        'glpat-your-gitlab-root-token-here'
+        # Fallback to plugin settings if environment variable not set
+        Setting.plugin_redmine_gitlab_integration['gitlab_token'] || ''
       end
 
       def create_gitlab_project_via_api(client)
