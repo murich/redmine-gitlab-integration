@@ -41,8 +41,13 @@ module RedmineGitlabIntegration
         result = super
 
         # Save GitLab group mapping if project was successfully updated
+        Rails.logger.info "[GITLAB DEBUG] Checking save conditions: @project=#{@project.present?}, errors=#{@project&.errors&.any?}, @gitlab_group_id=#{@gitlab_group_id.inspect}"
+
         if @project && !@project.errors.any? && @gitlab_group_id.present?
+          Rails.logger.info "[GITLAB DEBUG] Conditions met, calling save_gitlab_mapping"
           save_gitlab_mapping(@project, @gitlab_group_id)
+        else
+          Rails.logger.warn "[GITLAB DEBUG] Conditions NOT met for saving mapping"
         end
 
         Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER UPDATE END ==="
