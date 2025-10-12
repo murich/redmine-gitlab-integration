@@ -116,7 +116,8 @@ module RedmineGitlabIntegration
             'path_with_namespace' => project['path_with_namespace'],
             'ssh_url_to_repo' => project['ssh_url_to_repo'],
             'http_url_to_repo' => project['http_url_to_repo'],
-            'repository_storage' => project['repository_storage']
+            'repository_storage' => project['repository_storage'],
+            'created_at' => project['created_at']
           }
         else
           Rails.logger.error "[GITLAB API] Failed to fetch project: #{response.body}"
