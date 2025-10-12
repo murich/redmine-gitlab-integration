@@ -167,7 +167,7 @@ module RedmineGitlabIntegration
     end
 
     # Create a project in a specific group
-    def create_project_in_group(group_id, project_name, description = '', create_repo = true, is_public = false)
+    def create_project_in_group(group_id, project_name, description = '', initialize_with_readme = false, is_public = false)
       Rails.logger.info "[GITLAB API] Creating project '#{project_name}' in group #{group_id}"
 
       endpoint = "#{@gitlab_url}/api/v4/projects"
@@ -176,7 +176,7 @@ module RedmineGitlabIntegration
         name: project_name,
         description: description,
         visibility: is_public ? 'public' : 'private',
-        initialize_with_readme: create_repo,
+        initialize_with_readme: initialize_with_readme,
         namespace_id: group_id
       }
 
@@ -220,7 +220,7 @@ module RedmineGitlabIntegration
       end
     end
 
-    def create_project(project_name, description = '', create_repo = true, is_public = false)
+    def create_project(project_name, description = '', initialize_with_readme = false, is_public = false)
       Rails.logger.info "[GITLAB API] Creating project: #{project_name}"
 
       # GitLab API endpoint for creating projects
@@ -231,7 +231,7 @@ module RedmineGitlabIntegration
         name: project_name,
         description: description,
         visibility: is_public ? 'public' : 'private',
-        initialize_with_readme: create_repo,
+        initialize_with_readme: initialize_with_readme,
         namespace_id: get_namespace_id
       }
 

@@ -102,13 +102,13 @@ module RedmineGitlabIntegration
         gitlab_service = RedmineGitlabIntegration::GitlabService.new
 
         if @gitlab_project_id == 'new'
-          # Create new GitLab project
+          # Create new GitLab project (without README - repo is created empty)
           Rails.logger.info "[GITLAB DEBUG] Creating new GitLab project in group #{@gitlab_group_id}"
           result = gitlab_service.create_project_in_group(
             @gitlab_group_id,
             @project.name,
             @project.description || '',
-            true,
+            false,  # initialize_with_readme: false (empty repo)
             @project.is_public?
           )
 
