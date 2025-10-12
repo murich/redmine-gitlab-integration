@@ -25,18 +25,13 @@
     <em class="info" style="font-size: 11px; color: #666;">GitLab group path will be auto-generated from this name</em>
   </p>
 
-  <p>
-    <%= check_box_tag 'create_gitlab_repository', '1', true, id: 'create_gitlab_repository' %>
-    <label for="create_gitlab_repository">Create GitLab repository</label>
-  </p>
-
   <p id="gitlab_project_field" style="display: none;">
     <label for="gitlab_project_id">GitLab Project</label>
     <%= select_tag 'gitlab_project_id',
-        options_for_select([['-- Select existing project or create new --', ''], ['➕ Create new project', 'new']]),
+        options_for_select([["Don't create", ''], ['➕ Create new project', 'new']]),
         id: 'gitlab_project_id' %>
     <em class="info" id="gitlab_project_notice" style="font-size: 11px; color: #666; display: block; margin-top: 5px;">
-      Select an existing GitLab project to link, or create a new one
+      Link to an existing GitLab project or create a new one
     </em>
   </p>
 
@@ -54,7 +49,6 @@
   const newGroupField = document.getElementById('new_group_name_field');
   const newGroupNameInput = document.getElementById('new_group_name');
   const projectNameInput = document.getElementById('project_name');
-  const createRepoCheckbox = document.getElementById('create_gitlab_repository');
   const projectForm = document.querySelector('form#new_project, form[id^="edit_project"]');
   const gitlabProjectField = document.getElementById('gitlab_project_field');
   const gitlabProjectDropdown = document.getElementById('gitlab_project_id');
@@ -67,22 +61,20 @@
   // Form submission validation
   if (projectForm) {
     projectForm.addEventListener('submit', function(e) {
-      if (createRepoCheckbox && createRepoCheckbox.checked) {
-        const selectedGroup = groupDropdown.value;
+      const selectedGroup = groupDropdown.value;
 
-        if (!selectedGroup || selectedGroup === '') {
-          e.preventDefault();
-          alert('Please select a GitLab Group or create a new one');
-          groupDropdown.focus();
-          return false;
-        }
+      if (!selectedGroup || selectedGroup === '') {
+        e.preventDefault();
+        alert('Please select a GitLab Group or create a new one');
+        groupDropdown.focus();
+        return false;
+      }
 
-        if (selectedGroup === 'new' && (!newGroupNameInput.value || newGroupNameInput.value.trim() === '')) {
-          e.preventDefault();
-          alert('Please enter a name for the new GitLab group');
-          newGroupNameInput.focus();
-          return false;
-        }
+      if (selectedGroup === 'new' && (!newGroupNameInput.value || newGroupNameInput.value.trim() === '')) {
+        e.preventDefault();
+        alert('Please enter a name for the new GitLab group');
+        newGroupNameInput.focus();
+        return false;
       }
     });
   }
@@ -118,44 +110,40 @@
       return;
     }
 
-    if (createRepoCheckbox && createRepoCheckbox.checked) {
-      fetch('/gitlab_groups/' + groupId + '/orphan_projects')
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.projects) {
-            // Clear existing options except first two
-            gitlabProjectDropdown.innerHTML = '';
+    fetch('/gitlab_groups/' + groupId + '/orphan_projects')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.projects) {
+          // Clear existing options
+          gitlabProjectDropdown.innerHTML = '';
 
-            // Add default options
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.text = '-- Select existing project or create new --';
-            gitlabProjectDropdown.add(defaultOption);
+          // Add default options
+          const dontCreateOption = document.createElement('option');
+          dontCreateOption.value = '';
+          dontCreateOption.text = "Don't create";
+          gitlabProjectDropdown.add(dontCreateOption);
 
-            const newOption = document.createElement('option');
-            newOption.value = 'new';
-            newOption.text = '➕ Create new project';
-            gitlabProjectDropdown.add(newOption);
+          const newOption = document.createElement('option');
+          newOption.value = 'new';
+          newOption.text = '➕ Create new project';
+          gitlabProjectDropdown.add(newOption);
 
-            // Add orphan projects
-            data.projects.forEach(function(project) {
-              const option = document.createElement('option');
-              option.value = project.id;
-              option.text = project.name + ' (' + project.path + ')';
-              gitlabProjectDropdown.add(option);
-            });
+          // Add orphan projects
+          data.projects.forEach(function(project) {
+            const option = document.createElement('option');
+            option.value = project.id;
+            option.text = project.name + ' (' + project.path + ')';
+            gitlabProjectDropdown.add(option);
+          });
 
-            // Show the field
-            gitlabProjectField.style.display = 'block';
-          }
-        })
-        .catch(err => {
-          console.error('Error fetching orphan projects:', err);
-          gitlabProjectField.style.display = 'none';
-        });
-    } else {
-      gitlabProjectField.style.display = 'none';
-    }
+          // Show the field
+          gitlabProjectField.style.display = 'block';
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching orphan projects:', err);
+        gitlabProjectField.style.display = 'none';
+      });
   }
 
   // Handle "Create new group" option
@@ -176,17 +164,6 @@
       fetchOrphanProjects(this.value);
     }
   });
-
-  // Handle create repository checkbox
-  if (createRepoCheckbox) {
-    createRepoCheckbox.addEventListener('change', function() {
-      if (this.checked && groupDropdown.value && groupDropdown.value !== 'new') {
-        fetchOrphanProjects(groupDropdown.value);
-      } else {
-        gitlabProjectField.style.display = 'none';
-      }
-    });
-  }
 
   // Handle parent project change
   if (parentDropdown) {
