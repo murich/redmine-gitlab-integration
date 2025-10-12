@@ -214,6 +214,11 @@
         console.error('Error checking group conflict:', err);
       });
   }
+
+  // Initialize: fetch orphan projects if a group is already selected (edit mode)
+  if (groupDropdown.value && groupDropdown.value !== '' && groupDropdown.value !== 'new') {
+    fetchOrphanProjects(groupDropdown.value);
+  }
 })();
 <% end %>
 
