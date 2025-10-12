@@ -8,6 +8,7 @@ module RedmineGitlabIntegration
           before_action :fetch_gitlab_groups, only: [:new, :create, :edit, :settings]
           before_action :capture_gitlab_params, only: [:create, :update]
           before_action :validate_gitlab_group, only: [:create, :update]
+          after_action :save_gitlab_group_mapping, only: [:update]
 
           Rails.logger.info "[GITLAB DEBUG] ProjectsController patch applied with before_action"
         end
@@ -30,27 +31,6 @@ module RedmineGitlabIntegration
         result = super
 
         Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER CREATE END ==="
-
-        return result
-      end
-
-      def update
-        Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER UPDATE START ==="
-
-        # Call original update method
-        result = super
-
-        # Save GitLab group mapping if project was successfully updated
-        Rails.logger.info "[GITLAB DEBUG] Checking save conditions: @project=#{@project.present?}, errors=#{@project&.errors&.any?}, @gitlab_group_id=#{@gitlab_group_id.inspect}"
-
-        if @project && !@project.errors.any? && @gitlab_group_id.present?
-          Rails.logger.info "[GITLAB DEBUG] Conditions met, calling save_gitlab_mapping"
-          save_gitlab_mapping(@project, @gitlab_group_id)
-        else
-          Rails.logger.warn "[GITLAB DEBUG] Conditions NOT met for saving mapping"
-        end
-
-        Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER UPDATE END ==="
 
         return result
       end
@@ -79,11 +59,16 @@ module RedmineGitlabIntegration
         end
       end
 
-      def save_gitlab_mapping(project, gitlab_group_id)
-        Rails.logger.info "[GITLAB DEBUG] Saving GitLab group mapping: project=#{project.id}, group=#{gitlab_group_id}"
+      def save_gitlab_group_mapping
+        Rails.logger.info "[GITLAB DEBUG] save_gitlab_group_mapping called"
+        Rails.logger.info "[GITLAB DEBUG] @project=#{@project&.id}, @gitlab_group_id=#{@gitlab_group_id.inspect}, errors=#{@project&.errors&.any?}"
 
-        mapping = GitlabMapping.find_or_initialize_by(redmine_project_id: project.id)
-        mapping.gitlab_group_id = gitlab_group_id
+        return unless @project && !@project.errors.any? && @gitlab_group_id.present?
+
+        Rails.logger.info "[GITLAB DEBUG] Saving GitLab group mapping: project=#{@project.id}, group=#{@gitlab_group_id}"
+
+        mapping = GitlabMapping.find_or_initialize_by(redmine_project_id: @project.id)
+        mapping.gitlab_group_id = @gitlab_group_id
         mapping.mapping_type = 'group'
 
         if mapping.save
