@@ -170,8 +170,8 @@ module RedmineGitlabIntegration
 
           if disk_path.present?
             # GitLab stores at: /var/opt/gitlab/git-data/repositories/repositories/@hashed/...
-            # Redmine accesses via shared volume at: /opt/gitlab/git-data/repositories/@hashed/...
-            repository_path = "/opt/gitlab/git-data/repositories/#{disk_path}.git"
+            # Redmine accesses via shared volume at: /var/opt/gitlab/git-data/repositories/repositories/@hashed/...
+            repository_path = "/var/opt/gitlab/git-data/repositories/repositories/#{disk_path}.git"
 
             Rails.logger.info "[GITLAB DEBUG] GitLab disk path: #{disk_path}"
             Rails.logger.info "[GITLAB DEBUG] Redmine repository path: #{repository_path}"
