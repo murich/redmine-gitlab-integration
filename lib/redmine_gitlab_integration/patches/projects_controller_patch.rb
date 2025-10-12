@@ -5,9 +5,9 @@ module RedmineGitlabIntegration
     module ProjectsControllerPatch
       def self.included(base)
         base.class_eval do
-          before_action :fetch_gitlab_groups, only: [:new, :create]
-          before_action :capture_gitlab_params, only: [:create]
-          before_action :validate_gitlab_group, only: [:create]
+          before_action :fetch_gitlab_groups, only: [:new, :create, :edit, :settings]
+          before_action :capture_gitlab_params, only: [:create, :update]
+          before_action :validate_gitlab_group, only: [:create, :update]
 
           Rails.logger.info "[GITLAB DEBUG] ProjectsController patch applied with before_action"
         end
@@ -18,23 +18,56 @@ module RedmineGitlabIntegration
         Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER CREATE START ==="
         Rails.logger.info "[GITLAB DEBUG] Request method: #{request.method}"
         Rails.logger.info "[GITLAB DEBUG] Parameters: #{params.inspect}"
-        
+
         # Log GitLab-specific parameters
         gitlab_project_param = params[:create_gitlab_project]
         gitlab_repository_param = params[:create_gitlab_repository]
-        
+
         Rails.logger.info "[GITLAB DEBUG] create_gitlab_project param: #{gitlab_project_param.inspect}"
         Rails.logger.info "[GITLAB DEBUG] create_gitlab_repository param: #{gitlab_repository_param.inspect}"
-        
+
         # Call original create method
         result = super
-        
+
         Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER CREATE END ==="
-        
+
         return result
       end
 
+      def update
+        Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER UPDATE START ==="
+
+        # Call original update method
+        result = super
+
+        Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER UPDATE END ==="
+
+        return result
+      end
+
+      def edit
+        # Load the current GitLab group mapping if it exists
+        load_current_gitlab_mapping
+        super
+      end
+
+      def settings
+        # Load the current GitLab group mapping if it exists
+        load_current_gitlab_mapping
+        super
+      end
+
       private
+
+      def load_current_gitlab_mapping
+        return unless @project
+
+        mapping = GitlabProjectMapping.find_by(redmine_project_id: @project.id)
+        if mapping
+          @selected_group_id = mapping.gitlab_group_id
+          Rails.logger.info "[GITLAB DEBUG] Loaded existing group mapping: #{@selected_group_id}"
+        end
+      end
 
       def fetch_gitlab_groups
         Rails.logger.info "[GITLAB DEBUG] Fetching GitLab groups for form"
