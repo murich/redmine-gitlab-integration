@@ -11,7 +11,9 @@
           @selected_group_id
         ),
         id: 'gitlab_group_id',
-        required: true %>
+        required: true,
+        data: { original_value: @selected_group_id } %>
+    <span id="gitlab_group_change_indicator" class="change-indicator" style="display: none; margin-left: 10px; color: #FF8C00; font-style: italic;"></span>
     <div id="gitlab_group_notice">
       <% if @inherited_from %>
         <span class="info">📋 Inherited from parent: <%= @inherited_from.name %></span>
@@ -29,7 +31,9 @@
     <label for="gitlab_project_id">GitLab Project</label>
     <%= select_tag 'gitlab_project_id',
         options_for_select([["Don't create", ''], ['➕ Create new project', 'new']]),
-        id: 'gitlab_project_id' %>
+        id: 'gitlab_project_id',
+        data: { original_value: @selected_project_id } %>
+    <span id="gitlab_project_change_indicator" class="change-indicator" style="display: none; margin-left: 10px; color: #FF8C00; font-style: italic;"></span>
     <em class="info" id="gitlab_project_notice" style="font-size: 11px; color: #666; display: block; margin-top: 5px;">
       Link to an existing GitLab project or create a new one
     </em>
@@ -52,11 +56,55 @@
   const projectForm = document.querySelector('form#new_project, form[id^="edit_project"]');
   const gitlabProjectField = document.getElementById('gitlab_project_field');
   const gitlabProjectDropdown = document.getElementById('gitlab_project_id');
+  const groupChangeIndicator = document.getElementById('gitlab_group_change_indicator');
+  const projectChangeIndicator = document.getElementById('gitlab_project_change_indicator');
 
   if (!groupDropdown) return;
 
   let userSelectedGroup = false;
   let userEditedGroupName = false;
+
+  // Helper function to get option text by value
+  function getGroupNameByValue(value) {
+    if (!value || value === '') return '(empty)';
+    if (value === 'new') return '➕ Create new group...';
+    const option = groupDropdown.querySelector('option[value="' + value + '"]');
+    return option ? option.text : value;
+  }
+
+  function getProjectNameByValue(value) {
+    if (!value || value === '') return '(empty)';
+    if (value === 'new') return '➕ Create new project';
+    const option = gitlabProjectDropdown.querySelector('option[value="' + value + '"]');
+    return option ? option.text : value;
+  }
+
+  // Check and update change indicators
+  function updateGroupChangeIndicator() {
+    const originalValue = groupDropdown.getAttribute('data-original-value') || '';
+    const currentValue = groupDropdown.value || '';
+
+    if (originalValue !== currentValue) {
+      const originalName = getGroupNameByValue(originalValue);
+      groupChangeIndicator.textContent = 'Changed from ' + originalName;
+      groupChangeIndicator.style.display = 'inline';
+    } else {
+      groupChangeIndicator.style.display = 'none';
+    }
+  }
+
+  function updateProjectChangeIndicator() {
+    const originalValue = gitlabProjectDropdown.getAttribute('data-original-value') || '';
+    const currentValue = gitlabProjectDropdown.value || '';
+
+    if (originalValue !== currentValue) {
+      const originalName = getProjectNameByValue(originalValue);
+      projectChangeIndicator.textContent = 'Changed from ' + originalName;
+      projectChangeIndicator.style.display = 'inline';
+    } else {
+      projectChangeIndicator.style.display = 'none';
+    }
+  }
 
   // Form submission validation
   if (projectForm) {
@@ -148,6 +196,9 @@
             gitlabProjectDropdown.value = selectedProjectId;
           }
 
+          // Update change indicator after restoring selection
+          updateProjectChangeIndicator();
+
           // Show the field
           gitlabProjectField.style.display = 'block';
         }
@@ -161,6 +212,7 @@
   // Handle "Create new group" option
   groupDropdown.addEventListener('change', function() {
     userSelectedGroup = true;
+    updateGroupChangeIndicator();
 
     if (this.value === 'new') {
       newGroupField.style.display = 'block';
@@ -175,6 +227,11 @@
       // Fetch orphan projects for this group
       fetchOrphanProjects(this.value);
     }
+  });
+
+  // Handle GitLab project change
+  gitlabProjectDropdown.addEventListener('change', function() {
+    updateProjectChangeIndicator();
   });
 
   // Handle parent project change
