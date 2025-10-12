@@ -25,7 +25,7 @@
     <em class="info" style="font-size: 11px; color: #666;">GitLab group path will be auto-generated from this name</em>
   </p>
 
-  <p id="gitlab_project_field" style="display: none;">
+  <p id="gitlab_project_field" style="display: none;" data-selected-project-id="<%= @selected_project_id %>">
     <label for="gitlab_project_id">GitLab Project</label>
     <%= select_tag 'gitlab_project_id',
         options_for_select([["Don't create", ''], ['➕ Create new project', 'new']]),
@@ -114,6 +114,9 @@
       .then(res => res.json())
       .then(data => {
         if (data.success && data.projects) {
+          // Get currently selected project ID from data attribute
+          const selectedProjectId = gitlabProjectField.getAttribute('data-selected-project-id');
+
           // Clear existing options
           gitlabProjectDropdown.innerHTML = '';
 
@@ -135,6 +138,11 @@
             option.text = project.name + ' (' + project.path + ')';
             gitlabProjectDropdown.add(option);
           });
+
+          // Restore previously selected project if it exists in the list
+          if (selectedProjectId && selectedProjectId !== '' && selectedProjectId !== 'null') {
+            gitlabProjectDropdown.value = selectedProjectId;
+          }
 
           // Show the field
           gitlabProjectField.style.display = 'block';

@@ -44,7 +44,8 @@ module RedmineGitlabIntegration
         mapping = GitlabMapping.find_by(redmine_project_id: @project.id)
         if mapping
           @selected_group_id = mapping.gitlab_group_id
-          Rails.logger.info "[GITLAB DEBUG] Loaded existing group mapping: #{@selected_group_id}"
+          @selected_project_id = mapping.gitlab_project_id
+          Rails.logger.info "[GITLAB DEBUG] Loaded existing mapping: group=#{@selected_group_id}, project=#{@selected_project_id}"
         end
       end
 
