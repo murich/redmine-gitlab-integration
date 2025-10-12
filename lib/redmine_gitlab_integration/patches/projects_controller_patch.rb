@@ -40,6 +40,11 @@ module RedmineGitlabIntegration
         # Call original update method
         result = super
 
+        # Save GitLab group mapping if project was successfully updated
+        if @project && !@project.errors.any? && @gitlab_group_id.present?
+          save_gitlab_mapping(@project, @gitlab_group_id)
+        end
+
         Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER UPDATE END ==="
 
         return result
@@ -62,10 +67,24 @@ module RedmineGitlabIntegration
       def load_current_gitlab_mapping
         return unless @project
 
-        mapping = GitlabProjectMapping.find_by(redmine_project_id: @project.id)
+        mapping = GitlabMapping.find_by(redmine_project_id: @project.id)
         if mapping
           @selected_group_id = mapping.gitlab_group_id
           Rails.logger.info "[GITLAB DEBUG] Loaded existing group mapping: #{@selected_group_id}"
+        end
+      end
+
+      def save_gitlab_mapping(project, gitlab_group_id)
+        Rails.logger.info "[GITLAB DEBUG] Saving GitLab group mapping: project=#{project.id}, group=#{gitlab_group_id}"
+
+        mapping = GitlabMapping.find_or_initialize_by(redmine_project_id: project.id)
+        mapping.gitlab_group_id = gitlab_group_id
+        mapping.mapping_type = 'group'
+
+        if mapping.save
+          Rails.logger.info "[GITLAB DEBUG] Successfully saved GitLab mapping: #{mapping.inspect}"
+        else
+          Rails.logger.error "[GITLAB DEBUG] Failed to save GitLab mapping: #{mapping.errors.full_messages.join(', ')}"
         end
       end
 
