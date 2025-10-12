@@ -165,8 +165,19 @@ module RedmineGitlabIntegration
 
         begin
           # Execute gitlab-rails runner to get the actual disk path (hashed storage)
-          command = "docker exec gitlab_app gitlab-rails runner \"project = Project.find_by(id: #{gitlab_project_id}); puts project.repository.disk_path if project && project.repository\""
-          disk_path = `#{command}`.strip
+          # Retry a few times with delay as repository might not be immediately ready after creation
+          disk_path = nil
+          max_retries = 3
+
+          max_retries.times do |attempt|
+            command = "docker exec gitlab_app gitlab-rails runner \"project = Project.find_by(id: #{gitlab_project_id}); puts project.repository.disk_path if project && project.repository\""
+            disk_path = `#{command}`.strip
+
+            break if disk_path.present?
+
+            Rails.logger.info "[GITLAB DEBUG] Attempt #{attempt + 1}/#{max_retries}: Repository not ready yet, waiting 2 seconds..."
+            sleep 2
+          end
 
           if disk_path.present?
             # GitLab stores at: /var/opt/gitlab/git-data/repositories/repositories/@hashed/...
