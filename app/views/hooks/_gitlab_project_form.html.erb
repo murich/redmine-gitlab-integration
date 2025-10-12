@@ -235,7 +235,22 @@
 
     if (this.value === 'new') {
       newGroupField.style.display = 'block';
-      gitlabProjectField.style.display = 'none';
+
+      // Show project dropdown for new group with only "Don't create" and "Create new project" options
+      gitlabProjectDropdown.innerHTML = '';
+
+      const dontCreateOption = document.createElement('option');
+      dontCreateOption.value = '';
+      dontCreateOption.text = "Don't create";
+      gitlabProjectDropdown.add(dontCreateOption);
+
+      const newOption = document.createElement('option');
+      newOption.value = 'new';
+      newOption.text = '➕ Create new project';
+      gitlabProjectDropdown.add(newOption);
+
+      gitlabProjectField.style.display = 'block';
+
       if (!userEditedGroupName && projectNameInput && projectNameInput.value) {
         newGroupNameInput.value = sanitizeGroupName(projectNameInput.value);
       }
