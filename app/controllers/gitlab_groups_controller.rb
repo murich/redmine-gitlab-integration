@@ -44,8 +44,10 @@ class GitlabGroupsController < ApplicationController
 
   # GET /gitlab_groups/:group_id/orphan_projects
   # Returns list of GitLab projects in group that are not mapped to any Redmine project
+  # Optionally includes the currently linked project if current_project_id is provided
   def orphan_projects
     group_id = params[:group_id]
+    current_project_id = params[:current_project_id]
 
     begin
       gitlab_service = RedmineGitlabIntegration::GitlabService.new
@@ -54,10 +56,17 @@ class GitlabGroupsController < ApplicationController
       # Get all mapped GitLab project IDs
       mapped_project_ids = GitlabMapping.where.not(gitlab_project_id: nil).pluck(:gitlab_project_id)
 
-      # Filter out mapped projects - these are "orphans"
-      orphan_projects = all_projects.reject { |p| mapped_project_ids.include?(p['id']) }
+      # Filter out mapped projects, but keep the current project if specified
+      orphan_projects = all_projects.reject do |p|
+        project_id = p['id']
+        is_mapped = mapped_project_ids.include?(project_id)
+        is_current = current_project_id.present? && project_id.to_s == current_project_id.to_s
 
-      Rails.logger.info "[GITLAB GROUPS] Found #{orphan_projects.count} orphan projects in group #{group_id}"
+        # Keep if it's the current project OR if it's not mapped
+        is_mapped && !is_current
+      end
+
+      Rails.logger.info "[GITLAB GROUPS] Found #{orphan_projects.count} available projects in group #{group_id} (including current: #{current_project_id})"
 
       render json: { success: true, projects: orphan_projects }
     rescue => e

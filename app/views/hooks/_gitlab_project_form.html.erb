@@ -110,13 +110,17 @@
       return;
     }
 
-    fetch('/gitlab_groups/' + groupId + '/orphan_projects')
+    // Get currently selected project ID from data attribute to include in request
+    const selectedProjectId = gitlabProjectField.getAttribute('data-selected-project-id');
+    const url = '/gitlab_groups/' + groupId + '/orphan_projects' +
+                (selectedProjectId && selectedProjectId !== '' && selectedProjectId !== 'null'
+                  ? '?current_project_id=' + selectedProjectId
+                  : '');
+
+    fetch(url)
       .then(res => res.json())
       .then(data => {
         if (data.success && data.projects) {
-          // Get currently selected project ID from data attribute
-          const selectedProjectId = gitlabProjectField.getAttribute('data-selected-project-id');
-
           // Clear existing options
           gitlabProjectDropdown.innerHTML = '';
 
@@ -131,7 +135,7 @@
           newOption.text = '➕ Create new project';
           gitlabProjectDropdown.add(newOption);
 
-          // Add orphan projects
+          // Add available projects (orphans + currently linked)
           data.projects.forEach(function(project) {
             const option = document.createElement('option');
             option.value = project.id;
