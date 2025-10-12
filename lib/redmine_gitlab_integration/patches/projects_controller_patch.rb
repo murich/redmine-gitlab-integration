@@ -50,7 +50,7 @@ module RedmineGitlabIntegration
 
       def save_gitlab_group_mapping
         Rails.logger.info "[GITLAB DEBUG] save_gitlab_group_mapping called"
-        Rails.logger.info "[GITLAB DEBUG] @project=#{@project&.id}, @gitlab_group_id=#{@gitlab_group_id.inspect}, errors=#{@project&.errors&.any?}"
+        Rails.logger.info "[GITLAB DEBUG] @project=#{@project&.id}, @gitlab_group_id=#{@gitlab_group_id.inspect}, @gitlab_project_id=#{@gitlab_project_id.inspect}"
 
         return unless @project && !@project.errors.any? && @gitlab_group_id.present?
 
@@ -60,11 +60,93 @@ module RedmineGitlabIntegration
         mapping.gitlab_group_id = @gitlab_group_id
         mapping.mapping_type = 'group'
 
+        # Handle GitLab project creation or linking if requested
+        if @create_gitlab_repository && @gitlab_project_id.present?
+          handle_gitlab_project_linkage(mapping)
+        end
+
         if mapping.save
           Rails.logger.info "[GITLAB DEBUG] Successfully saved GitLab mapping: #{mapping.inspect}"
         else
           Rails.logger.error "[GITLAB DEBUG] Failed to save GitLab mapping: #{mapping.errors.full_messages.join(', ')}"
         end
+      end
+
+      def handle_gitlab_project_linkage(mapping)
+        gitlab_service = RedmineGitlabIntegration::GitlabService.new
+
+        if @gitlab_project_id == 'new'
+          # Create new GitLab project
+          Rails.logger.info "[GITLAB DEBUG] Creating new GitLab project in group #{@gitlab_group_id}"
+          result = gitlab_service.create_project_in_group(
+            @gitlab_group_id,
+            @project.name,
+            @project.description || '',
+            true,
+            @project.is_public?
+          )
+
+          if result[:success]
+            mapping.gitlab_project_id = result[:project_id]
+            set_repository_path(result[:http_url])
+            Rails.logger.info "[GITLAB DEBUG] Created new GitLab project: #{result[:project_id]}"
+          else
+            Rails.logger.error "[GITLAB DEBUG] Failed to create GitLab project: #{result[:error]}"
+          end
+        else
+          # Link to existing GitLab project
+          mapping.gitlab_project_id = @gitlab_project_id.to_i
+          Rails.logger.info "[GITLAB DEBUG] Linking to existing GitLab project: #{@gitlab_project_id}"
+
+          # Fetch project details to get repository path
+          projects = gitlab_service.list_group_projects(@gitlab_group_id)
+          project_data = projects.find { |p| p['id'].to_s == @gitlab_project_id.to_s }
+
+          if project_data
+            set_repository_path(project_data['http_url_to_repo'])
+          end
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB DEBUG] Error handling GitLab project: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+      end
+
+      def set_repository_path(gitlab_http_url)
+        return unless @project && gitlab_http_url
+
+        Rails.logger.info "[GITLAB DEBUG] Setting repository path for project #{@project.id}"
+
+        # Convert HTTP URL to shared volume path
+        # Example: http://gitlab_app/created-from-gitlab/orphan.git
+        # Becomes: /opt/gitlab/git-data/repositories/created-from-gitlab/orphan.git
+        repository_path = convert_gitlab_url_to_volume_path(gitlab_http_url)
+
+        Rails.logger.info "[GITLAB DEBUG] Repository path: #{repository_path}"
+
+        # Find or create repository for this project
+        repository = @project.repositories.find_or_initialize_by(type: 'Repository::Git')
+        repository.url = repository_path
+        repository.is_default = true
+
+        if repository.save
+          Rails.logger.info "[GITLAB DEBUG] Successfully set repository path: #{repository_path}"
+        else
+          Rails.logger.error "[GITLAB DEBUG] Failed to set repository: #{repository.errors.full_messages.join(', ')}"
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB DEBUG] Error setting repository path: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+      end
+
+      def convert_gitlab_url_to_volume_path(gitlab_url)
+        # Remove protocol and gitlab_app host
+        # http://gitlab_app/created-from-gitlab/orphan.git → created-from-gitlab/orphan.git
+        path = gitlab_url.sub(%r{https?://[^/]+/}, '')
+
+        # GitLab stores repositories in: /var/opt/gitlab/git-data/repositories/@hashed/...
+        # But for newly created projects, the path structure is: /var/opt/gitlab/git-data/repositories/group/project.git
+        # Since we're using shared volume mounted at /opt/gitlab/git-data in Redmine
+        "/opt/gitlab/git-data/repositories/#{path}"
       end
 
       def fetch_gitlab_groups
@@ -148,11 +230,12 @@ module RedmineGitlabIntegration
           @create_gitlab_repository = true
         end
 
-        # Capture group selection
+        # Capture group and project selection
         @gitlab_group_id = params[:gitlab_group_id]
         @new_group_name = params[:new_group_name]
+        @gitlab_project_id = params[:gitlab_project_id]
 
-        Rails.logger.info "[GITLAB DEBUG] Group ID: #{@gitlab_group_id}, New group name: #{@new_group_name}"
+        Rails.logger.info "[GITLAB DEBUG] Group ID: #{@gitlab_group_id}, New group name: #{@new_group_name}, Project ID: #{@gitlab_project_id}"
 
         # Store in project instance if it exists
         if @project
