@@ -138,5 +138,5 @@ end
 
 # Apply the patch
 unless ProjectsController.included_modules.include?(RedmineGitlabIntegration::Patches::ProjectsControllerPatch)
-  ProjectsController.send(:prepend, RedmineGitlabIntegration::Patches::ProjectsControllerPatch)
+  ProjectsController.send(:include, RedmineGitlabIntegration::Patches::ProjectsControllerPatch)
 end
