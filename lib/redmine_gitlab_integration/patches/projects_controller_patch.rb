@@ -187,6 +187,16 @@ module RedmineGitlabIntegration
             Rails.logger.info "[GITLAB DEBUG] GitLab disk path: #{disk_path}"
             Rails.logger.info "[GITLAB DEBUG] Redmine repository path: #{repository_path}"
 
+            # Fix permissions so Redmine can read the repository
+            # Extract hash prefix (e.g., "@hashed/4b/22" from "@hashed/4b/22/4b227...")
+            hash_parts = disk_path.split('/')
+            if hash_parts.length >= 3
+              permission_path = "/var/opt/gitlab/git-data/repositories/repositories/#{hash_parts[0..2].join('/')}"
+              chmod_cmd = "docker exec gitlab_app chmod -R o+rX #{permission_path}"
+              Rails.logger.info "[GITLAB DEBUG] Fixing permissions: #{chmod_cmd}"
+              `#{chmod_cmd}`
+            end
+
             # Find or create repository for this project
             repository = @project.repositories.find_or_initialize_by(type: 'Repository::Git')
             repository.url = repository_path
@@ -194,6 +204,14 @@ module RedmineGitlabIntegration
 
             if repository.save
               Rails.logger.info "[GITLAB DEBUG] Successfully set repository path: #{repository_path}"
+
+              # Fetch initial changesets
+              begin
+                repository.fetch_changesets
+                Rails.logger.info "[GITLAB DEBUG] Fetched changesets: #{repository.changesets.count}"
+              rescue => e
+                Rails.logger.error "[GITLAB DEBUG] Error fetching changesets: #{e.message}"
+              end
             else
               Rails.logger.error "[GITLAB DEBUG] Failed to set repository: #{repository.errors.full_messages.join(', ')}"
             end
