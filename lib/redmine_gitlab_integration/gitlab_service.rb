@@ -92,6 +92,42 @@ module RedmineGitlabIntegration
       end
     end
 
+    # Get a single project by ID
+    def get_project(project_id)
+      Rails.logger.info "[GITLAB API] Fetching project #{project_id}"
+
+      endpoint = "#{@gitlab_url}/api/v4/projects/#{project_id}"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.get(endpoint,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB API] Project response status: #{response.code}"
+
+        if response.success?
+          project = JSON.parse(response.body)
+          {
+            'id' => project['id'],
+            'name' => project['name'],
+            'path' => project['path'],
+            'path_with_namespace' => project['path_with_namespace'],
+            'ssh_url_to_repo' => project['ssh_url_to_repo'],
+            'http_url_to_repo' => project['http_url_to_repo'],
+            'repository_storage' => project['repository_storage']
+          }
+        else
+          Rails.logger.error "[GITLAB API] Failed to fetch project: #{response.body}"
+          nil
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB API] Error fetching project: #{e.message}"
+        nil
+      end
+    end
+
     # List all projects in a specific group
     def list_group_projects(group_id)
       Rails.logger.info "[GITLAB API] Fetching projects for group #{group_id}"

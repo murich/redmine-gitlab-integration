@@ -114,7 +114,7 @@ module RedmineGitlabIntegration
 
           if result[:success]
             mapping.gitlab_project_id = result[:project_id]
-            set_repository_path(result[:http_url])
+            set_repository_path_from_gitlab_project(result[:project_id])
             Rails.logger.info "[GITLAB DEBUG] Created new GitLab project: #{result[:project_id]}"
           else
             Rails.logger.error "[GITLAB DEBUG] Failed to create GitLab project: #{result[:error]}"
@@ -124,13 +124,7 @@ module RedmineGitlabIntegration
           mapping.gitlab_project_id = @gitlab_project_id.to_i
           Rails.logger.info "[GITLAB DEBUG] Linking to existing GitLab project: #{@gitlab_project_id}"
 
-          # Fetch project details to get repository path
-          projects = gitlab_service.list_group_projects(@gitlab_group_id)
-          project_data = projects.find { |p| p['id'].to_s == @gitlab_project_id.to_s }
-
-          if project_data
-            set_repository_path(project_data['http_url_to_repo'])
-          end
+          set_repository_path_from_gitlab_project(@gitlab_project_id.to_i)
         end
       rescue => e
         Rails.logger.error "[GITLAB DEBUG] Error handling GitLab project: #{e.message}"
@@ -162,6 +156,43 @@ module RedmineGitlabIntegration
       rescue => e
         Rails.logger.error "[GITLAB DEBUG] Error setting repository path: #{e.message}"
         Rails.logger.error e.backtrace.first(5).join("\n")
+      end
+
+      def set_repository_path_from_gitlab_project(gitlab_project_id)
+        return unless @project && gitlab_project_id
+
+        Rails.logger.info "[GITLAB DEBUG] Fetching repository disk path for GitLab project #{gitlab_project_id}"
+
+        begin
+          # Execute gitlab-rails runner to get the actual disk path (hashed storage)
+          command = "docker exec gitlab_app gitlab-rails runner \"project = Project.find_by(id: #{gitlab_project_id}); puts project.repository.disk_path if project && project.repository\""
+          disk_path = `#{command}`.strip
+
+          if disk_path.present?
+            # GitLab stores at: /var/opt/gitlab/git-data/repositories/repositories/@hashed/...
+            # Redmine accesses via shared volume at: /opt/gitlab/git-data/repositories/@hashed/...
+            repository_path = "/opt/gitlab/git-data/repositories/#{disk_path}.git"
+
+            Rails.logger.info "[GITLAB DEBUG] GitLab disk path: #{disk_path}"
+            Rails.logger.info "[GITLAB DEBUG] Redmine repository path: #{repository_path}"
+
+            # Find or create repository for this project
+            repository = @project.repositories.find_or_initialize_by(type: 'Repository::Git')
+            repository.url = repository_path
+            repository.is_default = true
+
+            if repository.save
+              Rails.logger.info "[GITLAB DEBUG] Successfully set repository path: #{repository_path}"
+            else
+              Rails.logger.error "[GITLAB DEBUG] Failed to set repository: #{repository.errors.full_messages.join(', ')}"
+            end
+          else
+            Rails.logger.error "[GITLAB DEBUG] Could not fetch disk path for GitLab project #{gitlab_project_id}"
+          end
+        rescue => e
+          Rails.logger.error "[GITLAB DEBUG] Error fetching GitLab disk path: #{e.message}"
+          Rails.logger.error e.backtrace.first(5).join("\n")
+        end
       end
 
       def convert_gitlab_url_to_volume_path(gitlab_url)
