@@ -45,7 +45,31 @@ module RedmineGitlabIntegration
         if mapping
           @selected_group_id = mapping.gitlab_group_id
           @selected_project_id = mapping.gitlab_project_id
-          Rails.logger.info "[GITLAB DEBUG] Loaded existing mapping: group=#{@selected_group_id}, project=#{@selected_project_id}"
+
+          # Fetch names from GitLab for better UI display
+          begin
+            gitlab_service = RedmineGitlabIntegration::GitlabService.new
+
+            # Get group name
+            if @selected_group_id.present?
+              groups = gitlab_service.list_groups
+              selected_group = groups.find { |g| g['id'].to_s == @selected_group_id.to_s }
+              @selected_group_name = selected_group ? selected_group['name'] : "Group ##{@selected_group_id}"
+            end
+
+            # Get project name
+            if @selected_project_id.present? && @selected_group_id.present?
+              projects = gitlab_service.list_group_projects(@selected_group_id)
+              selected_project = projects.find { |p| p['id'].to_s == @selected_project_id.to_s }
+              @selected_project_name = selected_project ? selected_project['name'] : "Project ##{@selected_project_id}"
+            end
+          rescue => e
+            Rails.logger.error "[GITLAB DEBUG] Error fetching names: #{e.message}"
+            @selected_group_name = "Group ##{@selected_group_id}"
+            @selected_project_name = "Project ##{@selected_project_id}"
+          end
+
+          Rails.logger.info "[GITLAB DEBUG] Loaded existing mapping: group=#{@selected_group_id} (#{@selected_group_name}), project=#{@selected_project_id} (#{@selected_project_name})"
         end
       end
 

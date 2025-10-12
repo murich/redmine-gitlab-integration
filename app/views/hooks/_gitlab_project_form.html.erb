@@ -27,7 +27,10 @@
     <em class="info" style="font-size: 11px; color: #666;">GitLab group path will be auto-generated from this name</em>
   </p>
 
-  <p id="gitlab_project_field" style="display: none;" data-selected-project-id="<%= @selected_project_id %>">
+  <p id="gitlab_project_field" style="display: none;"
+     data-selected-project-id="<%= @selected_project_id %>"
+     data-original-project-name="<%= @selected_project_name %>"
+     data-original-group-name="<%= @selected_group_name %>">
     <label for="gitlab_project_id">GitLab Project</label>
     <%= select_tag 'gitlab_project_id',
         options_for_select([["Don't create", ''], ['➕ Create new project', 'new']]),
@@ -98,8 +101,24 @@
     const currentValue = gitlabProjectDropdown.value || '';
 
     if (originalValue !== currentValue) {
-      const originalName = getProjectNameByValue(originalValue);
-      projectChangeIndicator.textContent = 'Changed from ' + originalName;
+      // Try to get stored original names first (more reliable when group changes)
+      const originalProjectName = gitlabProjectField.getAttribute('data-original-project-name');
+      const originalGroupName = gitlabProjectField.getAttribute('data-original-group-name');
+
+      let changeText;
+      if (originalProjectName && originalGroupName) {
+        // Show full context: "Changed from ProjectName in GroupName group"
+        changeText = 'Changed from ' + originalProjectName + ' in ' + originalGroupName + ' group';
+      } else if (originalValue && originalValue !== '' && originalValue !== 'null') {
+        // Fallback to looking up in dropdown (might not exist after group change)
+        const originalName = getProjectNameByValue(originalValue);
+        changeText = 'Changed from ' + originalName;
+      } else {
+        // Empty original value
+        changeText = 'Changed from (empty)';
+      }
+
+      projectChangeIndicator.textContent = changeText;
       projectChangeIndicator.style.display = 'inline';
     } else {
       projectChangeIndicator.style.display = 'none';
