@@ -6,6 +6,7 @@ module RedmineGitlabIntegration
       def self.included(base)
         base.class_eval do
           before_action :fetch_gitlab_groups, only: [:new, :create, :edit, :settings]
+          before_action :load_current_gitlab_mapping, only: [:edit, :settings]
           before_action :capture_gitlab_params, only: [:create, :update]
           before_action :validate_gitlab_group, only: [:create, :update]
           after_action :save_gitlab_group_mapping, only: [:update]
@@ -33,18 +34,6 @@ module RedmineGitlabIntegration
         Rails.logger.info "[GITLAB DEBUG] === PROJECTS CONTROLLER CREATE END ==="
 
         return result
-      end
-
-      def edit
-        # Load the current GitLab group mapping if it exists
-        load_current_gitlab_mapping
-        super
-      end
-
-      def settings
-        # Load the current GitLab group mapping if it exists
-        load_current_gitlab_mapping
-        super
       end
 
       private
