@@ -92,6 +92,43 @@ module RedmineGitlabIntegration
       end
     end
 
+    # List all projects in a specific group
+    def list_group_projects(group_id)
+      Rails.logger.info "[GITLAB API] Fetching projects for group #{group_id}"
+
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{group_id}/projects"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.get(endpoint,
+          headers: headers,
+          query: { per_page: 100, include_subgroups: false },
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB API] Group projects response status: #{response.code}"
+
+        if response.success?
+          projects = JSON.parse(response.body)
+          Rails.logger.info "[GITLAB API] Found #{projects.count} projects in group #{group_id}"
+          projects.map { |p| {
+            'id' => p['id'],
+            'name' => p['name'],
+            'path' => p['path'],
+            'path_with_namespace' => p['path_with_namespace'],
+            'ssh_url_to_repo' => p['ssh_url_to_repo'],
+            'http_url_to_repo' => p['http_url_to_repo']
+          }}
+        else
+          Rails.logger.error "[GITLAB API] Failed to fetch group projects: #{response.body}"
+          []
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB API] Error fetching group projects: #{e.message}"
+        []
+      end
+    end
+
     # Create a project in a specific group
     def create_project_in_group(group_id, project_name, description = '', create_repo = true, is_public = false)
       Rails.logger.info "[GITLAB API] Creating project '#{project_name}' in group #{group_id}"
