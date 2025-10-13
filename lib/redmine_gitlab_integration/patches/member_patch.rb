@@ -107,8 +107,8 @@ module RedmineGitlabIntegration
       end
 
       def sync_member_update_to_gitlab
-        # Only sync if roles changed
-        return unless saved_change_to_role_ids? && user&.active? && project
+        # Sync member role updates to GitLab
+        return unless user&.active? && project
 
         begin
           Rails.logger.info "[GITLAB MEMBER SYNC] Member roles updated: #{user.login} in project #{project.name}"
