@@ -1,0 +1,204 @@
+<div class="gitlab-settings">
+  <h3><%= l(:label_gitlab_api_settings) rescue 'GitLab API Settings' %></h3>
+
+  <p>
+    <label for="settings_gitlab_url"><%= l(:label_gitlab_url) rescue 'GitLab URL' %></label>
+    <%= text_field_tag 'settings[gitlab_url]', @settings['gitlab_url'],
+        size: 60, placeholder: 'http://gitlab_app or https://gitlab.example.com' %>
+    <em class="info"><%= l(:text_gitlab_url_info) rescue 'Internal GitLab URL for API access (e.g., http://gitlab_app)' %></em>
+  </p>
+
+  <p>
+    <label for="settings_gitlab_token"><%= l(:label_gitlab_token) rescue 'GitLab API Token' %></label>
+    <%= password_field_tag 'settings[gitlab_token]', @settings['gitlab_token'],
+        size: 60, placeholder: 'glpat-xxxxxxxxxxxxxxxxxxxx' %>
+    <em class="info"><%= l(:text_gitlab_token_info) rescue 'GitLab Personal Access Token with API and admin permissions' %></em>
+  </p>
+
+  <p>
+    <label for="settings_gitlab_namespace"><%= l(:label_gitlab_namespace) rescue 'GitLab Namespace (Optional)' %></label>
+    <%= text_field_tag 'settings[gitlab_namespace]', @settings['gitlab_namespace'],
+        size: 60, placeholder: 'my-namespace' %>
+    <em class="info"><%= l(:text_gitlab_namespace_info) rescue 'Default GitLab namespace/group for new projects (leave empty to use root)' %></em>
+  </p>
+
+  <hr style="margin: 30px 0;">
+
+  <h3><%= l(:label_gitlab_mappings_visualization) rescue 'GitLab Mappings Visualization' %></h3>
+
+  <div class="gitlab-mappings-info">
+    <p><%= l(:text_gitlab_mappings_info) rescue 'Visual representation of Redmine projects mapped to GitLab groups and repositories.' %></p>
+
+    <%
+      begin
+        mapping_count = GitlabMapping.count
+        mapped_with_groups = GitlabMapping.where.not(gitlab_group_id: nil).count
+        mapped_with_projects = GitlabMapping.where.not(gitlab_project_id: nil).count
+    %>
+    <div class="gitlab-stats" style="background: #f0f8ff; padding: 15px; border-radius: 4px; margin: 15px 0;">
+      <strong><%= l(:label_gitlab_mapping_stats) rescue 'Mapping Statistics' %>:</strong>
+      <ul style="margin: 10px 0 0 20px;">
+        <li><%= l(:label_total_mappings) rescue 'Total Mappings' %>: <strong><%= mapping_count %></strong></li>
+        <li><%= l(:label_mapped_to_groups) rescue 'Mapped to GitLab Groups' %>: <strong><%= mapped_with_groups %></strong></li>
+        <li><%= l(:label_mapped_to_projects) rescue 'Mapped to GitLab Projects' %>: <strong><%= mapped_with_projects %></strong></li>
+      </ul>
+    </div>
+    <%
+      rescue => e
+    %>
+    <div class="warning" style="padding: 10px; margin: 10px 0; border-left: 4px solid #ff9800;">
+      <%= l(:text_gitlab_mappings_error) rescue 'Unable to load mapping statistics' %>: <%= e.message %>
+    </div>
+    <% end %>
+  </div>
+
+  <div style="margin-top: 20px;">
+    <%= link_to l(:label_view_mappings_graph) rescue 'View Mappings Graph',
+        '/gitlab_mappings',
+        class: 'icon icon-zoom-in',
+        target: '_blank',
+        style: 'font-size: 14px; padding: 8px 12px; background: #0052cc; color: white; border-radius: 4px; text-decoration: none; display: inline-block;' %>
+
+    <span style="margin-left: 15px; color: #666;">
+      <%= l(:text_opens_new_tab) rescue '(Opens in new tab)' %>
+    </span>
+  </div>
+
+  <hr style="margin: 30px 0;">
+
+  <h3><%= l(:label_gitlab_integration_features) rescue 'Integration Features' %></h3>
+
+  <div class="gitlab-features-info" style="background: #f9f9f9; padding: 15px; border-radius: 4px;">
+    <p><strong><%= l(:label_current_features) rescue 'Current Features' %>:</strong></p>
+    <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
+      <li>✅ Automatic GitLab group creation from Redmine projects</li>
+      <li>✅ Automatic GitLab project/repository creation</li>
+      <li>✅ Member synchronization (Redmine → GitLab)</li>
+      <li>✅ GitLab badges linking back to Redmine</li>
+      <li>✅ Redmine integration in GitLab (commit references)</li>
+      <li>✅ Repository synchronization and display in Redmine</li>
+    </ul>
+
+    <p style="margin-top: 15px;"><strong><%= l(:label_configuration_notes) rescue 'Configuration Notes' %>:</strong></p>
+    <ul style="margin: 10px 0 0 20px; line-height: 1.8; color: #666;">
+      <li>GitLab URL should be accessible from Redmine container (use internal hostname)</li>
+      <li>API Token requires <code>api</code>, <code>read_api</code>, <code>read_repository</code>, and <code>write_repository</code> scopes</li>
+      <li>For production, set <code>GITLAB_API_URL</code> and <code>GITLAB_API_TOKEN</code> environment variables</li>
+      <li>Environment variables override these settings</li>
+    </ul>
+  </div>
+
+  <hr style="margin: 30px 0;">
+
+  <h3><%= l(:label_test_connection) rescue 'Test GitLab Connection' %></h3>
+
+  <div id="gitlab-connection-test">
+    <button type="button" id="test-gitlab-connection" class="icon icon-test"
+            style="padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      <%= l(:button_test_connection) rescue 'Test Connection' %>
+    </button>
+
+    <div id="gitlab-test-result" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
+  </div>
+</div>
+
+<style>
+.gitlab-settings label {
+  font-weight: bold;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.gitlab-settings input[type="text"],
+.gitlab-settings input[type="password"] {
+  width: 100%;
+  max-width: 600px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.gitlab-settings em.info {
+  display: block;
+  margin-top: 5px;
+  color: #666;
+  font-size: 0.9em;
+}
+
+.gitlab-settings code {
+  background: #f4f4f4;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var testButton = document.getElementById('test-gitlab-connection');
+  var testResult = document.getElementById('gitlab-test-result');
+
+  if (testButton) {
+    testButton.addEventListener('click', function() {
+      testButton.disabled = true;
+      testButton.textContent = '<%= l(:button_testing) rescue "Testing..." %>';
+      testResult.style.display = 'none';
+
+      // Get current settings values
+      var gitlabUrl = document.querySelector('input[name="settings[gitlab_url]"]').value;
+      var gitlabToken = document.querySelector('input[name="settings[gitlab_token]"]').value;
+
+      if (!gitlabUrl || !gitlabToken) {
+        showTestResult('error', '<%= l(:text_gitlab_settings_required) rescue "Please fill in GitLab URL and API Token" %>');
+        testButton.disabled = false;
+        testButton.textContent = '<%= l(:button_test_connection) rescue "Test Connection" %>';
+        return;
+      }
+
+      // Test connection via GitLab API
+      fetch('/gitlab_groups', {
+        method: 'GET',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data && data.groups && data.groups.length >= 0) {
+          showTestResult('success',
+            '<%= l(:text_gitlab_connection_success) rescue "✅ Connection successful!" %> ' +
+            '<%= l(:text_gitlab_groups_found) rescue "Found" %> ' + data.groups.length + ' <%= l(:text_gitlab_groups) rescue "GitLab groups" %>.'
+          );
+        } else {
+          showTestResult('warning', '<%= l(:text_gitlab_connection_partial) rescue "⚠️ Connected but no groups found" %>');
+        }
+      })
+      .catch(error => {
+        showTestResult('error',
+          '<%= l(:text_gitlab_connection_failed) rescue "❌ Connection failed" %>: ' + error.message
+        );
+      })
+      .finally(function() {
+        testButton.disabled = false;
+        testButton.textContent = '<%= l(:button_test_connection) rescue "Test Connection" %>';
+      });
+    });
+  }
+
+  function showTestResult(type, message) {
+    testResult.style.display = 'block';
+    testResult.className = type;
+    testResult.textContent = message;
+
+    var colors = {
+      'success': '#d4edda',
+      'error': '#f8d7da',
+      'warning': '#fff3cd'
+    };
+    testResult.style.background = colors[type] || '#f0f0f0';
+    testResult.style.border = '1px solid ' + (colors[type] || '#ccc');
+  }
+});
+</script>
