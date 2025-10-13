@@ -99,6 +99,15 @@ module RedmineGitlabIntegration
 
         if mapping.save
           Rails.logger.info "[GITLAB DEBUG] Successfully saved GitLab mapping: #{mapping.inspect}"
+
+          # Add Redmine badge to GitLab group for easy navigation back
+          begin
+            gitlab_service = RedmineGitlabIntegration::GitlabService.new
+            badge_result = gitlab_service.add_redmine_badge_to_group(@gitlab_group_id.to_i, @project)
+            Rails.logger.info "[GITLAB DEBUG] Badge result: #{badge_result.inspect}"
+          rescue => e
+            Rails.logger.error "[GITLAB DEBUG] Error adding badge: #{e.message}"
+          end
         else
           Rails.logger.error "[GITLAB DEBUG] Failed to save GitLab mapping: #{mapping.errors.full_messages.join(', ')}"
         end

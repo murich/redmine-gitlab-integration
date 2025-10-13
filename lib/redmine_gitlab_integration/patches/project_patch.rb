@@ -97,6 +97,11 @@ module RedmineGitlabIntegration
                 gitlab_service = RedmineGitlabIntegration::GitlabService.new
                 sync_results = gitlab_service.sync_project_members(gitlab_project['namespace']['id'], self)
                 Rails.logger.info "[GITLAB DEBUG] Member sync results: #{sync_results.inspect}"
+
+                # Add Redmine badge to GitLab group for easy navigation back
+                Rails.logger.info "[GITLAB DEBUG] Adding Redmine badge to GitLab group..."
+                badge_result = gitlab_service.add_redmine_badge_to_group(gitlab_project['namespace']['id'], self)
+                Rails.logger.info "[GITLAB DEBUG] Badge result: #{badge_result.inspect}"
               rescue => e
                 Rails.logger.error "[GITLAB DEBUG] Error syncing members: #{e.message}"
                 Rails.logger.error e.backtrace.first(3).join("\n")

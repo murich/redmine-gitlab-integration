@@ -487,6 +487,110 @@ module RedmineGitlabIntegration
       results
     end
 
+    # Add a badge to a GitLab group linking back to Redmine project
+    # Badges appear on the group overview page with clickable links
+    # @param gitlab_group_id [Integer] GitLab group ID
+    # @param redmine_project [Project] Redmine project object
+    # @return [Hash] Result with success status
+    def add_redmine_badge_to_group(gitlab_group_id, redmine_project)
+      Rails.logger.info "[GITLAB BADGE] Adding Redmine link badge to group #{gitlab_group_id}"
+
+      # Get Redmine external URL from environment
+      redmine_url = ENV['REDMINE_EXTERNAL_URL'] || 'http://localhost:8087'
+
+      # Build badge parameters
+      badge_name = "Redmine Project"
+      badge_link = "#{redmine_url}/projects/#{redmine_project.identifier}"
+      badge_image = "#{redmine_url}/favicon.ico"
+
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{gitlab_group_id}/badges"
+      headers = {
+        'Private-Token' => @gitlab_token,
+        'Content-Type' => 'application/json'
+      }
+
+      params = {
+        name: badge_name,
+        link_url: badge_link,
+        image_url: badge_image
+      }
+
+      begin
+        response = self.class.post(endpoint,
+          body: params.to_json,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB BADGE] Response status: #{response.code}"
+
+        if response.success?
+          Rails.logger.info "[GITLAB BADGE] Badge added successfully: #{badge_link}"
+          { success: true, message: 'Badge added successfully', badge_link: badge_link }
+        elsif response.code == 400 && response.body.include?('already exists')
+          # Badge already exists - that's okay
+          Rails.logger.info "[GITLAB BADGE] Badge already exists for group #{gitlab_group_id}"
+          { success: true, message: 'Badge already exists', badge_link: badge_link }
+        else
+          Rails.logger.error "[GITLAB BADGE] Failed to add badge: #{response.body}"
+          { success: false, error: response.body }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB BADGE] Error adding badge: #{e.message}"
+        { success: false, error: e.message }
+      end
+    end
+
+    # Add a badge to a GitLab project linking back to Redmine project
+    # @param gitlab_project_id [Integer] GitLab project ID
+    # @param redmine_project [Project] Redmine project object
+    # @return [Hash] Result with success status
+    def add_redmine_badge_to_project(gitlab_project_id, redmine_project)
+      Rails.logger.info "[GITLAB BADGE] Adding Redmine link badge to project #{gitlab_project_id}"
+
+      redmine_url = ENV['REDMINE_EXTERNAL_URL'] || 'http://localhost:8087'
+
+      badge_name = "Redmine Project"
+      badge_link = "#{redmine_url}/projects/#{redmine_project.identifier}"
+      badge_image = "#{redmine_url}/favicon.ico"
+
+      endpoint = "#{@gitlab_url}/api/v4/projects/#{gitlab_project_id}/badges"
+      headers = {
+        'Private-Token' => @gitlab_token,
+        'Content-Type' => 'application/json'
+      }
+
+      params = {
+        name: badge_name,
+        link_url: badge_link,
+        image_url: badge_image
+      }
+
+      begin
+        response = self.class.post(endpoint,
+          body: params.to_json,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB BADGE] Response status: #{response.code}"
+
+        if response.success?
+          Rails.logger.info "[GITLAB BADGE] Badge added successfully: #{badge_link}"
+          { success: true, message: 'Badge added successfully', badge_link: badge_link }
+        elsif response.code == 400 && response.body.include?('already exists')
+          Rails.logger.info "[GITLAB BADGE] Badge already exists for project #{gitlab_project_id}"
+          { success: true, message: 'Badge already exists', badge_link: badge_link }
+        else
+          Rails.logger.error "[GITLAB BADGE] Failed to add badge: #{response.body}"
+          { success: false, error: response.body }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB BADGE] Error adding badge: #{e.message}"
+        { success: false, error: e.message }
+      end
+    end
+
     private
 
     # Find GitLab user by Casdoor ID (most reliable method)
