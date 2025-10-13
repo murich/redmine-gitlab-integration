@@ -294,7 +294,12 @@
   let offsetY = 0;
 
   // Fetch graph data
-  fetch('/gitlab_mappings/data')
+  fetch('/gitlab_mappings/data', {
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  })
     .then(response => response.json())
     .then(data => {
       graphData = data;
@@ -442,25 +447,28 @@
     <% if @mappings && @mappings.any? %>
       const tbody = document.getElementById('mappings-table-body');
       tbody.innerHTML = '';
+      let row;
 
       <% @mappings.each do |mapping| %>
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td><strong><%= mapping.project.name %></strong><br><small style="color: #999;"><%= mapping.project.identifier %></small></td>
-          <td><%= mapping.gitlab_group_id || '<span style="color: #999;">—</span>' %></td>
-          <td><%= mapping.gitlab_project_id || '<span style="color: #999;">—</span>' %></td>
-          <td><span class="badge info"><%= mapping.mapping_type || 'unknown' %></span></td>
-          <td>
-            <% if mapping.gitlab_group_id && mapping.gitlab_project_id %>
-              <span class="badge success">✓ Fully Mapped</span>
-            <% elsif mapping.gitlab_group_id %>
-              <span class="badge info">→ Group Only</span>
-            <% else %>
-              <span class="badge" style="background: #f8d7da; color: #721c24;">✗ No Mapping</span>
-            <% end %>
-          </td>
-        `;
-        tbody.appendChild(row);
+        <% if mapping.project %>
+          row = document.createElement('tr');
+          row.innerHTML = `
+            <td><strong><%= mapping.project.name %></strong><br><small style="color: #999;"><%= mapping.project.identifier %></small></td>
+            <td><%== mapping.gitlab_group_id || '<span style="color: #999;">—</span>' %></td>
+            <td><%== mapping.gitlab_project_id || '<span style="color: #999;">—</span>' %></td>
+            <td><span class="badge info"><%= mapping.mapping_type || 'unknown' %></span></td>
+            <td>
+              <% if mapping.gitlab_group_id && mapping.gitlab_project_id %>
+                <span class="badge success">✓ Fully Mapped</span>
+              <% elsif mapping.gitlab_group_id %>
+                <span class="badge info">→ Group Only</span>
+              <% else %>
+                <span class="badge" style="background: #f8d7da; color: #721c24;">✗ No Mapping</span>
+              <% end %>
+            </td>
+          `;
+          tbody.appendChild(row);
+        <% end %>
       <% end %>
     <% else %>
       document.getElementById('mappings-table-body').innerHTML =

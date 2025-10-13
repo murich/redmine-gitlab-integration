@@ -53,14 +53,14 @@
   </div>
 
   <div style="margin-top: 20px;">
-    <%= link_to l(:label_view_mappings_graph) rescue 'View Mappings Graph',
+    <%= link_to (l(:label_view_mappings_graph) rescue 'View Mappings Graph'),
         '/gitlab_mappings',
         class: 'icon icon-zoom-in',
         target: '_blank',
         style: 'font-size: 14px; padding: 8px 12px; background: #0052cc; color: white; border-radius: 4px; text-decoration: none; display: inline-block;' %>
 
     <span style="margin-left: 15px; color: #666;">
-      <%= l(:text_opens_new_tab) rescue '(Opens in new tab)' %>
+      <%= (l(:text_opens_new_tab) rescue '(Opens in new tab)') %>
     </span>
   </div>
 

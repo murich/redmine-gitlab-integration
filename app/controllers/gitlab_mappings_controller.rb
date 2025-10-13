@@ -1,8 +1,11 @@
 class GitlabMappingsController < ApplicationController
-  before_action :require_admin
+  before_action :require_admin, except: [:graph_data]
+  before_action :check_admin_for_ajax, only: [:graph_data]
+  skip_before_action :verify_authenticity_token, only: [:graph_data]
 
   def index
-    @mappings = GitlabMapping.includes(:project).all
+    # Load all mappings and filter out orphaned ones (where project was deleted)
+    @mappings = GitlabMapping.includes(:project).all.select { |m| m.project.present? }
   end
 
   def graph_data
@@ -33,9 +36,18 @@ class GitlabMappingsController < ApplicationController
 
   private
 
+  def check_admin_for_ajax
+    unless User.current.admin?
+      render json: { nodes: [], connections: [], error: 'Admin access required' }, status: :forbidden
+    end
+  end
+
   def build_nodes
     nodes = []
     GitlabMapping.includes(:project).each_with_index do |mapping, index|
+      # Skip orphaned mappings (project was deleted but mapping still exists)
+      next unless mapping.project
+
       nodes << {
         id: "redmine-#{mapping.redmine_project_id}",
         type: 'redmine',
@@ -69,7 +81,10 @@ class GitlabMappingsController < ApplicationController
 
   def build_connections
     connections = []
-    GitlabMapping.each do |mapping|
+    GitlabMapping.includes(:project).each do |mapping|
+      # Skip orphaned mappings (project was deleted but mapping still exists)
+      next unless mapping.project
+
       if mapping.gitlab_group_id
         connections << {
           source: "redmine-#{mapping.redmine_project_id}",
