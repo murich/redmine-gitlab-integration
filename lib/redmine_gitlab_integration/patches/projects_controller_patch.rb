@@ -141,6 +141,14 @@ module RedmineGitlabIntegration
             mapping.gitlab_project_id = result[:project_id]
             Rails.logger.info "[GITLAB DEBUG] Created new GitLab project: #{result[:project_id]}"
 
+            # Configure Redmine integration on GitLab project
+            begin
+              integration_result = gitlab_service.configure_redmine_integration(result[:project_id], @project)
+              Rails.logger.info "[GITLAB INTEGRATION] Setup result: #{integration_result.inspect}"
+            rescue => e
+              Rails.logger.error "[GITLAB INTEGRATION] Error setting up integration: #{e.message}"
+            end
+
             # Fetch the created project to get its creation timestamp from GitLab
             gitlab_project = gitlab_service.get_project(result[:project_id])
             if gitlab_project && gitlab_project['created_at']
@@ -161,6 +169,14 @@ module RedmineGitlabIntegration
           # Link to existing GitLab project
           mapping.gitlab_project_id = @gitlab_project_id.to_i
           Rails.logger.info "[GITLAB DEBUG] Linking to existing GitLab project: #{@gitlab_project_id}"
+
+          # Configure Redmine integration on GitLab project
+          begin
+            integration_result = gitlab_service.configure_redmine_integration(@gitlab_project_id.to_i, @project)
+            Rails.logger.info "[GITLAB INTEGRATION] Setup result: #{integration_result.inspect}"
+          rescue => e
+            Rails.logger.error "[GITLAB INTEGRATION] Error setting up integration: #{e.message}"
+          end
 
           # Fetch the existing project to get its creation timestamp from GitLab
           gitlab_project = gitlab_service.get_project(@gitlab_project_id.to_i)

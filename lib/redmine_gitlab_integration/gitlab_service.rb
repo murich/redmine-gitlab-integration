@@ -671,6 +671,97 @@ module RedmineGitlabIntegration
       delete_badge_from_group(gitlab_group_id, badge['id'])
     end
 
+    # Configure Redmine integration on GitLab project
+    # @param gitlab_project_id [Integer] GitLab project ID
+    # @param redmine_project [Project] Redmine project instance
+    # @return [Hash] Result with success status
+    def configure_redmine_integration(gitlab_project_id, redmine_project)
+      Rails.logger.info "[GITLAB INTEGRATION] Configuring Redmine integration for GitLab project #{gitlab_project_id}"
+
+      redmine_url = ENV['REDMINE_EXTERNAL_URL'].presence || 'http://localhost:8087'
+      endpoint = "#{@gitlab_url}/api/v4/projects/#{gitlab_project_id}/integrations/redmine"
+
+      # Prepare integration parameters
+      params = {
+        project_url: "#{redmine_url}/projects/#{redmine_project.identifier}",
+        issues_url: "#{redmine_url}/issues/:id",
+        new_issue_url: "#{redmine_url}/projects/#{redmine_project.identifier}/issues/new"
+      }
+
+      headers = {
+        'Private-Token' => @gitlab_token,
+        'Content-Type' => 'application/json'
+      }
+
+      Rails.logger.info "[GITLAB INTEGRATION] Request params: #{params.inspect}"
+
+      begin
+        response = self.class.put(endpoint,
+          headers: headers,
+          body: params.to_json,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB INTEGRATION] Response status: #{response.code}"
+        Rails.logger.info "[GITLAB INTEGRATION] Response body: #{response.body}"
+
+        if response.code.to_i.between?(200, 299)
+          Rails.logger.info "[GITLAB INTEGRATION] Successfully configured Redmine integration"
+          {
+            success: true,
+            message: "Redmine integration configured successfully",
+            project_url: params[:project_url]
+          }
+        else
+          Rails.logger.error "[GITLAB INTEGRATION] Failed to configure integration: #{response.body}"
+          {
+            success: false,
+            error: "HTTP #{response.code}: #{response.body}",
+            message: "Failed to configure Redmine integration"
+          }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB INTEGRATION] Error configuring Redmine integration: #{e.message}"
+        Rails.logger.error e.backtrace.first(3).join("\n")
+        {
+          success: false,
+          error: e.message,
+          message: "Exception occurred during integration setup"
+        }
+      end
+    end
+
+    # Get current Redmine integration status
+    # @param gitlab_project_id [Integer] GitLab project ID
+    # @return [Hash, nil] Integration configuration or nil if not found
+    def get_redmine_integration(gitlab_project_id)
+      Rails.logger.info "[GITLAB INTEGRATION] Getting Redmine integration for GitLab project #{gitlab_project_id}"
+
+      endpoint = "#{@gitlab_url}/api/v4/projects/#{gitlab_project_id}/integrations/redmine"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.get(endpoint,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB INTEGRATION] Response status: #{response.code}"
+
+        if response.success?
+          integration = JSON.parse(response.body)
+          Rails.logger.info "[GITLAB INTEGRATION] Integration active: #{integration['active']}"
+          integration
+        else
+          Rails.logger.error "[GITLAB INTEGRATION] Failed to get integration: #{response.body}"
+          nil
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB INTEGRATION] Error getting integration: #{e.message}"
+        nil
+      end
+    end
+
     private
 
     # Find GitLab user by Casdoor ID (most reliable method)
