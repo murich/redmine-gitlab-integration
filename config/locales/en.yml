@@ -1,0 +1,34 @@
+en:
+  # Settings page labels
+  label_gitlab_api_settings: "GitLab API Settings"
+  label_gitlab_url: "GitLab URL"
+  label_gitlab_token: "GitLab API Token"
+  label_gitlab_namespace: "GitLab Namespace (Optional)"
+  label_gitlab_mappings_visualization: "GitLab Mappings Visualization"
+  label_gitlab_mapping_stats: "Mapping Statistics"
+  label_total_mappings: "Total Mappings"
+  label_mapped_to_groups: "Mapped to GitLab Groups"
+  label_mapped_to_projects: "Mapped to GitLab Projects"
+  label_view_mappings_graph: "View Mappings Graph"
+  label_gitlab_integration_features: "Integration Features"
+  label_current_features: "Current Features"
+  label_configuration_notes: "Configuration Notes"
+  label_test_connection: "Test GitLab Connection"
+
+  # Settings page help text
+  text_gitlab_url_info: "Internal GitLab URL for API access (e.g., http://gitlab_app)"
+  text_gitlab_token_info: "GitLab Personal Access Token with API and admin permissions"
+  text_gitlab_namespace_info: "Default GitLab namespace/group for new projects (leave empty to use root)"
+  text_gitlab_mappings_info: "Visual representation of Redmine projects mapped to GitLab groups and repositories."
+  text_gitlab_mappings_error: "Unable to load mapping statistics"
+  text_opens_new_tab: "(Opens in new tab)"
+
+  # Connection test
+  button_test_connection: "Test Connection"
+  button_testing: "Testing..."
+  text_gitlab_settings_required: "Please fill in GitLab URL and API Token"
+  text_gitlab_connection_success: "✅ Connection successful!"
+  text_gitlab_connection_partial: "⚠️ Connected but no groups found"
+  text_gitlab_connection_failed: "❌ Connection failed"
+  text_gitlab_groups_found: "Found"
+  text_gitlab_groups: "GitLab groups"

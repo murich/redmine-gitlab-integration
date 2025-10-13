@@ -1,0 +1,34 @@
+ru:
+  # Метки страницы настроек
+  label_gitlab_api_settings: "Настройки GitLab API"
+  label_gitlab_url: "URL GitLab"
+  label_gitlab_token: "API токен GitLab"
+  label_gitlab_namespace: "Пространство имён GitLab (Опционально)"
+  label_gitlab_mappings_visualization: "Визуализация связей GitLab"
+  label_gitlab_mapping_stats: "Статистика связей"
+  label_total_mappings: "Всего связей"
+  label_mapped_to_groups: "Связано с группами GitLab"
+  label_mapped_to_projects: "Связано с проектами GitLab"
+  label_view_mappings_graph: "Просмотр графа связей"
+  label_gitlab_integration_features: "Возможности интеграции"
+  label_current_features: "Текущие возможности"
+  label_configuration_notes: "Примечания к настройке"
+  label_test_connection: "Тест подключения GitLab"
+
+  # Подсказки страницы настроек
+  text_gitlab_url_info: "Внутренний URL GitLab для доступа к API (например, http://gitlab_app)"
+  text_gitlab_token_info: "Персональный токен доступа GitLab с правами API и администратора"
+  text_gitlab_namespace_info: "Пространство имён/группа GitLab по умолчанию для новых проектов (оставьте пустым для использования корневого)"
+  text_gitlab_mappings_info: "Визуальное представление проектов Redmine, связанных с группами и репозиториями GitLab."
+  text_gitlab_mappings_error: "Невозможно загрузить статистику связей"
+  text_opens_new_tab: "(Откроется в новой вкладке)"
+
+  # Тест подключения
+  button_test_connection: "Проверить подключение"
+  button_testing: "Проверка..."
+  text_gitlab_settings_required: "Пожалуйста, заполните URL GitLab и API токен"
+  text_gitlab_connection_success: "✅ Подключение успешно!"
+  text_gitlab_connection_partial: "⚠️ Подключено, но группы не найдены"
+  text_gitlab_connection_failed: "❌ Подключение не удалось"
+  text_gitlab_groups_found: "Найдено"
+  text_gitlab_groups: "групп GitLab"

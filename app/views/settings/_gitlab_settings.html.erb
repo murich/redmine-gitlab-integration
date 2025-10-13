@@ -10,7 +10,7 @@
 
   <p>
     <label for="settings_gitlab_token"><%= l(:label_gitlab_token) rescue 'GitLab API Token' %></label>
-    <%= password_field_tag 'settings[gitlab_token]', @settings['gitlab_token'],
+    <%= text_field_tag 'settings[gitlab_token]', @settings['gitlab_token'],
         size: 60, placeholder: 'glpat-xxxxxxxxxxxxxxxxxxxx' %>
     <em class="info"><%= l(:text_gitlab_token_info) rescue 'GitLab Personal Access Token with API and admin permissions' %></em>
   </p>

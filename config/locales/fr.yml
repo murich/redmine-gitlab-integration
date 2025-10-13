@@ -1,0 +1,34 @@
+fr:
+  # Libellés de la page des paramètres
+  label_gitlab_api_settings: "Paramètres de l'API GitLab"
+  label_gitlab_url: "URL GitLab"
+  label_gitlab_token: "Jeton API GitLab"
+  label_gitlab_namespace: "Espace de noms GitLab (Optionnel)"
+  label_gitlab_mappings_visualization: "Visualisation des mappages GitLab"
+  label_gitlab_mapping_stats: "Statistiques de mappage"
+  label_total_mappings: "Mappages totaux"
+  label_mapped_to_groups: "Mappés aux groupes GitLab"
+  label_mapped_to_projects: "Mappés aux projets GitLab"
+  label_view_mappings_graph: "Voir le graphique des mappages"
+  label_gitlab_integration_features: "Fonctionnalités d'intégration"
+  label_current_features: "Fonctionnalités actuelles"
+  label_configuration_notes: "Notes de configuration"
+  label_test_connection: "Test de connexion GitLab"
+
+  # Texte d'aide de la page des paramètres
+  text_gitlab_url_info: "URL GitLab interne pour l'accès API (par ex. http://gitlab_app)"
+  text_gitlab_token_info: "Jeton d'accès personnel GitLab avec permissions API et admin"
+  text_gitlab_namespace_info: "Espace de noms/groupe GitLab par défaut pour les nouveaux projets (laisser vide pour utiliser la racine)"
+  text_gitlab_mappings_info: "Représentation visuelle des projets Redmine mappés aux groupes et dépôts GitLab."
+  text_gitlab_mappings_error: "Impossible de charger les statistiques de mappage"
+  text_opens_new_tab: "(S'ouvre dans un nouvel onglet)"
+
+  # Test de connexion
+  button_test_connection: "Tester la connexion"
+  button_testing: "Test en cours..."
+  text_gitlab_settings_required: "Veuillez remplir l'URL GitLab et le jeton API"
+  text_gitlab_connection_success: "✅ Connexion réussie!"
+  text_gitlab_connection_partial: "⚠️ Connecté mais aucun groupe trouvé"
+  text_gitlab_connection_failed: "❌ Échec de la connexion"
+  text_gitlab_groups_found: "Trouvé"
+  text_gitlab_groups: "groupes GitLab"

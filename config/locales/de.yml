@@ -1,0 +1,34 @@
+de:
+  # Einstellungsseite Beschriftungen
+  label_gitlab_api_settings: "GitLab API Einstellungen"
+  label_gitlab_url: "GitLab URL"
+  label_gitlab_token: "GitLab API Token"
+  label_gitlab_namespace: "GitLab Namensraum (Optional)"
+  label_gitlab_mappings_visualization: "GitLab Zuordnungen Visualisierung"
+  label_gitlab_mapping_stats: "Zuordnungsstatistiken"
+  label_total_mappings: "Gesamte Zuordnungen"
+  label_mapped_to_groups: "Zugeordnet zu GitLab Gruppen"
+  label_mapped_to_projects: "Zugeordnet zu GitLab Projekten"
+  label_view_mappings_graph: "Zuordnungsgraph anzeigen"
+  label_gitlab_integration_features: "Integrationsfunktionen"
+  label_current_features: "Aktuelle Funktionen"
+  label_configuration_notes: "Konfigurationshinweise"
+  label_test_connection: "GitLab Verbindung testen"
+
+  # Einstellungsseite Hilfetext
+  text_gitlab_url_info: "Interne GitLab URL für API-Zugriff (z.B. http://gitlab_app)"
+  text_gitlab_token_info: "GitLab Personal Access Token mit API- und Admin-Berechtigungen"
+  text_gitlab_namespace_info: "Standard GitLab Namensraum/Gruppe für neue Projekte (leer lassen für Root)"
+  text_gitlab_mappings_info: "Visuelle Darstellung von Redmine-Projekten, die GitLab-Gruppen und -Repositories zugeordnet sind."
+  text_gitlab_mappings_error: "Zuordnungsstatistiken können nicht geladen werden"
+  text_opens_new_tab: "(Öffnet in neuem Tab)"
+
+  # Verbindungstest
+  button_test_connection: "Verbindung testen"
+  button_testing: "Teste..."
+  text_gitlab_settings_required: "Bitte GitLab URL und API Token ausfüllen"
+  text_gitlab_connection_success: "✅ Verbindung erfolgreich!"
+  text_gitlab_connection_partial: "⚠️ Verbunden, aber keine Gruppen gefunden"
+  text_gitlab_connection_failed: "❌ Verbindung fehlgeschlagen"
+  text_gitlab_groups_found: "Gefunden"
+  text_gitlab_groups: "GitLab Gruppen"

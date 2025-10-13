@@ -1,0 +1,34 @@
+zh:
+  # 设置页面标签
+  label_gitlab_api_settings: "GitLab API 设置"
+  label_gitlab_url: "GitLab URL"
+  label_gitlab_token: "GitLab API 令牌"
+  label_gitlab_namespace: "GitLab 命名空间（可选）"
+  label_gitlab_mappings_visualization: "GitLab 映射可视化"
+  label_gitlab_mapping_stats: "映射统计"
+  label_total_mappings: "总映射数"
+  label_mapped_to_groups: "已映射到 GitLab 组"
+  label_mapped_to_projects: "已映射到 GitLab 项目"
+  label_view_mappings_graph: "查看映射图"
+  label_gitlab_integration_features: "集成功能"
+  label_current_features: "当前功能"
+  label_configuration_notes: "配置说明"
+  label_test_connection: "测试 GitLab 连接"
+
+  # 设置页面帮助文本
+  text_gitlab_url_info: "用于 API 访问的内部 GitLab URL（例如 http://gitlab_app）"
+  text_gitlab_token_info: "具有 API 和管理员权限的 GitLab 个人访问令牌"
+  text_gitlab_namespace_info: "新项目的默认 GitLab 命名空间/组（留空使用根目录）"
+  text_gitlab_mappings_info: "映射到 GitLab 组和仓库的 Redmine 项目的可视化表示。"
+  text_gitlab_mappings_error: "无法加载映射统计信息"
+  text_opens_new_tab: "（在新标签页中打开）"
+
+  # 连接测试
+  button_test_connection: "测试连接"
+  button_testing: "测试中..."
+  text_gitlab_settings_required: "请填写 GitLab URL 和 API 令牌"
+  text_gitlab_connection_success: "✅ 连接成功！"
+  text_gitlab_connection_partial: "⚠️ 已连接但未找到组"
+  text_gitlab_connection_failed: "❌ 连接失败"
+  text_gitlab_groups_found: "找到"
+  text_gitlab_groups: "个 GitLab 组"
