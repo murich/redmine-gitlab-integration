@@ -4,8 +4,9 @@ module RedmineGitlabIntegration
     
     def initialize
       # Prefer environment variables over plugin settings for easier deployment
-      @gitlab_url = ENV['GITLAB_API_URL'] || Setting.plugin_redmine_gitlab_integration['gitlab_url'] || 'http://gitlab_app'
-      @gitlab_token = ENV['GITLAB_API_TOKEN'] || Setting.plugin_redmine_gitlab_integration['gitlab_token'] || ''
+      # Use .presence to convert empty strings to nil for proper fallback
+      @gitlab_url = ENV['GITLAB_API_URL'].presence || Setting.plugin_redmine_gitlab_integration['gitlab_url'] || 'http://gitlab_app'
+      @gitlab_token = ENV['GITLAB_API_TOKEN'].presence || Setting.plugin_redmine_gitlab_integration['gitlab_token'] || ''
       @gitlab_namespace = Setting.plugin_redmine_gitlab_integration['gitlab_namespace'] || ''
 
       Rails.logger.info "[GITLAB SERVICE] Initialized with URL: #{@gitlab_url}, Token present: #{@gitlab_token.present?}"
@@ -51,7 +52,7 @@ module RedmineGitlabIntegration
       params = {
         name: group_name,
         path: group_path,
-        visibility: 'private'
+        visibility: 'internal'
       }
 
       headers = {
@@ -175,7 +176,7 @@ module RedmineGitlabIntegration
       params = {
         name: project_name,
         description: description,
-        visibility: is_public ? 'public' : 'private',
+        visibility: is_public ? 'public' : 'internal',
         initialize_with_readme: initialize_with_readme,
         namespace_id: group_id
       }
@@ -230,7 +231,7 @@ module RedmineGitlabIntegration
       params = {
         name: project_name,
         description: description,
-        visibility: is_public ? 'public' : 'private',
+        visibility: is_public ? 'public' : 'internal',
         initialize_with_readme: initialize_with_readme,
         namespace_id: get_namespace_id
       }
@@ -276,17 +277,331 @@ module RedmineGitlabIntegration
       end
     end
     
+    # Find GitLab user ID for a Redmine user
+    # Uses three-tier matching: 1) Casdoor ID, 2) Username, 3) Email
+    # Results are cached in gitlab_user_mappings table
+    # @param redmine_user [User] Redmine user object
+    # @return [Integer, nil] GitLab user ID or nil if not found
+    def find_gitlab_user_id(redmine_user)
+      return nil unless redmine_user
+
+      # 1. Check cache first
+      cached_gitlab_id = GitlabUserMapping.find_gitlab_user_id(redmine_user.id)
+      if cached_gitlab_id
+        Rails.logger.info "[GITLAB USER LOOKUP] Found cached mapping for Redmine user #{redmine_user.login}: GitLab ID #{cached_gitlab_id}"
+        return cached_gitlab_id
+      end
+
+      # 2. Try Casdoor ID match (most reliable)
+      if defined?(OauthIdentity)
+        identity = OauthIdentity.find_by(user_id: redmine_user.id, provider: 'casdoor')
+        if identity&.uid
+          Rails.logger.info "[GITLAB USER LOOKUP] Trying Casdoor ID match for #{redmine_user.login}: #{identity.uid}"
+          gitlab_user = find_gitlab_user_by_casdoor_id(identity.uid)
+          if gitlab_user
+            cache_user_mapping(redmine_user.id, gitlab_user['id'], gitlab_user['username'], 'casdoor_id')
+            return gitlab_user['id']
+          end
+        end
+      end
+
+      # 3. Fallback: username match
+      Rails.logger.info "[GITLAB USER LOOKUP] Trying username match for #{redmine_user.login}"
+      gitlab_user = find_gitlab_user_by_username(redmine_user.login)
+      if gitlab_user
+        cache_user_mapping(redmine_user.id, gitlab_user['id'], gitlab_user['username'], 'username')
+        return gitlab_user['id']
+      end
+
+      # 4. Fallback: email match
+      if redmine_user.mail.present?
+        Rails.logger.info "[GITLAB USER LOOKUP] Trying email match for #{redmine_user.mail}"
+        gitlab_user = find_gitlab_user_by_email(redmine_user.mail)
+        if gitlab_user
+          cache_user_mapping(redmine_user.id, gitlab_user['id'], gitlab_user['username'], 'email')
+          return gitlab_user['id']
+        end
+      end
+
+      Rails.logger.warn "[GITLAB USER LOOKUP] No match found for Redmine user #{redmine_user.login}"
+      nil
+    end
+
+    # Add or update a group member
+    # @param group_id [Integer] GitLab group ID
+    # @param gitlab_user_id [Integer] GitLab user ID
+    # @param access_level [Integer] Access level (10=Guest, 20=Reporter, 30=Developer, 40=Maintainer, 50=Owner)
+    # @return [Hash] Result with success status
+    def add_group_member(group_id, gitlab_user_id, access_level)
+      Rails.logger.info "[GITLAB MEMBER] Adding user #{gitlab_user_id} to group #{group_id} with access level #{access_level}"
+
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{group_id}/members"
+      headers = {
+        'Private-Token' => @gitlab_token,
+        'Content-Type' => 'application/json'
+      }
+
+      params = {
+        user_id: gitlab_user_id,
+        access_level: access_level
+      }
+
+      begin
+        response = self.class.post(endpoint,
+          body: params.to_json,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB MEMBER] Response status: #{response.code}"
+
+        if response.success?
+          { success: true, message: 'Member added successfully' }
+        elsif response.code == 409
+          # Member already exists, try updating instead
+          Rails.logger.info "[GITLAB MEMBER] Member already exists, updating access level"
+          update_group_member(group_id, gitlab_user_id, access_level)
+        else
+          Rails.logger.error "[GITLAB MEMBER] Failed to add member: #{response.body}"
+          { success: false, error: response.body }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB MEMBER] Error adding member: #{e.message}"
+        { success: false, error: e.message }
+      end
+    end
+
+    # Update group member access level
+    # @param group_id [Integer] GitLab group ID
+    # @param gitlab_user_id [Integer] GitLab user ID
+    # @param access_level [Integer] New access level
+    # @return [Hash] Result with success status
+    def update_group_member(group_id, gitlab_user_id, access_level)
+      Rails.logger.info "[GITLAB MEMBER] Updating user #{gitlab_user_id} in group #{group_id} to access level #{access_level}"
+
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{group_id}/members/#{gitlab_user_id}"
+      headers = {
+        'Private-Token' => @gitlab_token,
+        'Content-Type' => 'application/json'
+      }
+
+      params = { access_level: access_level }
+
+      begin
+        response = self.class.put(endpoint,
+          body: params.to_json,
+          headers: headers,
+          timeout: 30
+        )
+
+        if response.success?
+          { success: true, message: 'Member updated successfully' }
+        else
+          Rails.logger.error "[GITLAB MEMBER] Failed to update member: #{response.body}"
+          { success: false, error: response.body }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB MEMBER] Error updating member: #{e.message}"
+        { success: false, error: e.message }
+      end
+    end
+
+    # Remove a user from a GitLab group
+    # @param group_id [Integer] GitLab group ID
+    # @param gitlab_user_id [Integer] GitLab user ID
+    # @return [Hash] Result with success status
+    def remove_group_member(group_id, gitlab_user_id)
+      Rails.logger.info "[GITLAB MEMBER] Removing user #{gitlab_user_id} from group #{group_id}"
+
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{group_id}/members/#{gitlab_user_id}"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.delete(endpoint,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB MEMBER] Remove response status: #{response.code}"
+
+        if response.success? || response.code == 404
+          # 404 means user was already not in group - that's okay
+          { success: true, message: 'Member removed successfully' }
+        else
+          Rails.logger.error "[GITLAB MEMBER] Failed to remove member: #{response.body}"
+          { success: false, error: response.body }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB MEMBER] Error removing member: #{e.message}"
+        { success: false, error: e.message }
+      end
+    end
+
+    # Synchronize Redmine project members to GitLab group
+    # @param gitlab_group_id [Integer] GitLab group ID
+    # @param redmine_project [Project] Redmine project object
+    # @return [Hash] Summary of sync operation
+    def sync_project_members(gitlab_group_id, redmine_project)
+      Rails.logger.info "[GITLAB MEMBER SYNC] Starting member sync for project #{redmine_project.name} to group #{gitlab_group_id}"
+
+      results = {
+        total: 0,
+        added: 0,
+        updated: 0,
+        failed: 0,
+        errors: []
+      }
+
+      redmine_project.members.includes(:user, :roles).each do |member|
+        next unless member.user&.active?
+
+        results[:total] += 1
+        user = member.user
+
+        # Find GitLab user ID
+        gitlab_user_id = find_gitlab_user_id(user)
+        unless gitlab_user_id
+          results[:failed] += 1
+          results[:errors] << "No GitLab user found for Redmine user #{user.login}"
+          next
+        end
+
+        # Map Redmine roles to GitLab access levels
+        access_level = map_role_to_access_level(member.roles)
+
+        # Add member to GitLab group
+        result = add_group_member(gitlab_group_id, gitlab_user_id, access_level)
+        if result[:success]
+          if result[:message].include?('updated')
+            results[:updated] += 1
+          else
+            results[:added] += 1
+          end
+        else
+          results[:failed] += 1
+          results[:errors] << "Failed to add #{user.login}: #{result[:error]}"
+        end
+      end
+
+      Rails.logger.info "[GITLAB MEMBER SYNC] Sync complete: #{results[:added]} added, #{results[:updated]} updated, #{results[:failed]} failed"
+      results
+    end
+
     private
-    
+
+    # Find GitLab user by Casdoor ID (most reliable method)
+    def find_gitlab_user_by_casdoor_id(casdoor_id)
+      endpoint = "#{@gitlab_url}/api/v4/users"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.get(endpoint,
+          headers: headers,
+          query: { extern_uid: casdoor_id, provider: 'openid_connect' },
+          timeout: 30
+        )
+
+        if response.success?
+          users = JSON.parse(response.body)
+          users.first
+        else
+          nil
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB USER LOOKUP] Error searching by Casdoor ID: #{e.message}"
+        nil
+      end
+    end
+
+    # Find GitLab user by username
+    def find_gitlab_user_by_username(username)
+      endpoint = "#{@gitlab_url}/api/v4/users"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.get(endpoint,
+          headers: headers,
+          query: { username: username },
+          timeout: 30
+        )
+
+        if response.success?
+          users = JSON.parse(response.body)
+          users.first
+        else
+          nil
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB USER LOOKUP] Error searching by username: #{e.message}"
+        nil
+      end
+    end
+
+    # Find GitLab user by email
+    def find_gitlab_user_by_email(email)
+      endpoint = "#{@gitlab_url}/api/v4/users"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.get(endpoint,
+          headers: headers,
+          query: { search: email },
+          timeout: 30
+        )
+
+        if response.success?
+          users = JSON.parse(response.body)
+          # Exact email match
+          users.find { |u| u['email'] == email }
+        else
+          nil
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB USER LOOKUP] Error searching by email: #{e.message}"
+        nil
+      end
+    end
+
+    # Cache user mapping for performance
+    def cache_user_mapping(redmine_user_id, gitlab_user_id, gitlab_username, match_method)
+      GitlabUserMapping.cache_mapping(redmine_user_id, gitlab_user_id, gitlab_username, match_method)
+      Rails.logger.info "[GITLAB USER LOOKUP] Cached mapping: Redmine #{redmine_user_id} -> GitLab #{gitlab_user_id} (#{match_method})"
+    end
+
+    # Map Redmine roles to GitLab access levels
+    # Manager (role_id: 3) -> Owner (50)
+    # Developer (role_id: 4) -> Developer (30)
+    # Reporter (role_id: 5) -> Reporter (20)
+    # Default -> Developer (30)
+    # @param roles [Array, ActiveRecord::Relation] Array of Role objects or role names
+    # @return [Integer] GitLab access level
+    def map_role_to_access_level(roles)
+      return 30 if roles.empty?
+
+      # Handle both role objects and role name strings
+      role_names = if roles.first.is_a?(String)
+        roles.map(&:downcase)
+      else
+        roles.map(&:name).map(&:downcase)
+      end
+
+      return 50 if role_names.any? { |name| name.include?('manager') || name.include?('admin') }
+      return 30 if role_names.any? { |name| name.include?('developer') }
+      return 20 if role_names.any? { |name| name.include?('reporter') }
+
+      # Default to Developer
+      30
+    end
+
     def get_namespace_id
       # If namespace is specified, fetch its ID
       return nil if @gitlab_namespace.blank?
-      
+
       begin
-        response = self.class.get("#{@gitlab_url}/api/v4/namespaces", 
+        response = self.class.get("#{@gitlab_url}/api/v4/namespaces",
           headers: { 'Private-Token' => @gitlab_token }
         )
-        
+
         if response.success?
           namespaces = JSON.parse(response.body)
           namespace = namespaces.find { |ns| ns['path'] == @gitlab_namespace }

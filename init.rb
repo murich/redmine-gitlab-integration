@@ -27,6 +27,7 @@ Rails.application.config.after_initialize do
   begin
     require File.expand_path('../lib/redmine_gitlab_integration/patches/project_patch', __FILE__)
     require File.expand_path('../lib/redmine_gitlab_integration/patches/projects_controller_patch', __FILE__)
+    require File.expand_path('../lib/redmine_gitlab_integration/patches/member_patch', __FILE__)
   rescue LoadError => e
     Rails.logger.warn "GitLab integration plugin files not found: #{e.message}"
   end

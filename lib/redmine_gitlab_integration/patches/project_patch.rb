@@ -89,6 +89,19 @@ module RedmineGitlabIntegration
           if effective_create_project
             Rails.logger.info "[GITLAB DEBUG] Creating GitLab project..."
             gitlab_project = create_gitlab_project_via_api(gitlab_client)
+
+            # Sync project members to GitLab group after creation
+            if gitlab_project && gitlab_project['namespace'] && gitlab_project['namespace']['id']
+              Rails.logger.info "[GITLAB DEBUG] Syncing project members to GitLab group..."
+              begin
+                gitlab_service = RedmineGitlabIntegration::GitlabService.new
+                sync_results = gitlab_service.sync_project_members(gitlab_project['namespace']['id'], self)
+                Rails.logger.info "[GITLAB DEBUG] Member sync results: #{sync_results.inspect}"
+              rescue => e
+                Rails.logger.error "[GITLAB DEBUG] Error syncing members: #{e.message}"
+                Rails.logger.error e.backtrace.first(3).join("\n")
+              end
+            end
           end
 
           # Create GitLab repository if requested
@@ -98,7 +111,7 @@ module RedmineGitlabIntegration
               # If we didn't create a project above, try to find existing one
               gitlab_project = find_existing_gitlab_project(gitlab_client)
             end
-            
+
             if gitlab_project
               create_gitlab_repository_in_redmine(gitlab_project)
             else
@@ -203,7 +216,7 @@ module RedmineGitlabIntegration
             name: self.name,
             path: self.identifier,
             description: self.description.to_s,
-            visibility: 'private',
+            visibility: 'internal',
             initialize_with_readme: true
           }
 
@@ -252,7 +265,7 @@ module RedmineGitlabIntegration
           group_data = {
             name: group_name,
             path: group_path,
-            visibility: 'private'
+            visibility: 'internal'
           }
 
           request.body = group_data.to_json

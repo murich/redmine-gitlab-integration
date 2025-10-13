@@ -79,6 +79,12 @@ module RedmineGitlabIntegration
 
         return unless @project && !@project.errors.any? && @gitlab_group_id.present?
 
+        # Create new GitLab group if "new" was selected
+        handle_gitlab_group_creation if @gitlab_group_id == 'new'
+
+        # Return if group creation failed
+        return unless @gitlab_group_id.present? && @gitlab_group_id != 'new'
+
         Rails.logger.info "[GITLAB DEBUG] Saving GitLab group mapping: project=#{@project.id}, group=#{@gitlab_group_id}"
 
         mapping = GitlabMapping.find_or_initialize_by(redmine_project_id: @project.id)
@@ -103,9 +109,9 @@ module RedmineGitlabIntegration
 
         if @gitlab_project_id == 'new'
           # Create new GitLab project (without README - repo is created empty)
-          Rails.logger.info "[GITLAB DEBUG] Creating new GitLab project in group #{@gitlab_group_id}"
+          Rails.logger.info "[GITLAB DEBUG] Creating new GitLab project in group #{@gitlab_group_id} (type: #{@gitlab_group_id.class})"
           result = gitlab_service.create_project_in_group(
-            @gitlab_group_id,
+            @gitlab_group_id.to_i,  # Ensure it's an integer
             @project.name,
             @project.description || '',
             false,  # initialize_with_readme: false (empty repo)
@@ -156,6 +162,28 @@ module RedmineGitlabIntegration
         Rails.logger.error e.backtrace.first(5).join("\n")
       end
 
+      def handle_gitlab_group_creation
+        Rails.logger.info "[GITLAB DEBUG] handle_gitlab_group_creation called, @new_group_name=#{@new_group_name.inspect}"
+        return unless @new_group_name.present?
+
+        Rails.logger.info "[GITLAB DEBUG] Creating new GitLab group: #{@new_group_name}"
+
+        gitlab_service = RedmineGitlabIntegration::GitlabService.new
+        result = gitlab_service.create_group(@new_group_name)
+
+        if result[:success]
+          @gitlab_group_id = result[:group_id]
+          Rails.logger.info "[GITLAB DEBUG] Successfully created GitLab group '#{result[:name]}' with ID: #{@gitlab_group_id} (path: #{result[:path]})"
+          Rails.logger.info "[GITLAB DEBUG] Updated @gitlab_group_id from 'new' to #{@gitlab_group_id}"
+        else
+          Rails.logger.error "[GITLAB DEBUG] Failed to create GitLab group: #{result[:error]}"
+          @project.errors.add(:base, "Failed to create GitLab group: #{result[:error]}")
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB DEBUG] Error creating GitLab group: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+        @project.errors.add(:base, "Error creating GitLab group: #{e.message}")
+      end
 
       def fetch_gitlab_groups
         Rails.logger.info "[GITLAB DEBUG] Fetching GitLab groups for form"
