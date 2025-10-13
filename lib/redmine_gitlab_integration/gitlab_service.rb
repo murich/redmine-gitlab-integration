@@ -591,6 +591,86 @@ module RedmineGitlabIntegration
       end
     end
 
+    # Find Redmine badge in a GitLab group by name
+    # @param gitlab_group_id [Integer] GitLab group ID
+    # @param badge_name [String] Badge name (default: "Redmine Project")
+    # @return [Hash, nil] Badge hash with id, or nil if not found
+    def find_redmine_badge_in_group(gitlab_group_id, badge_name = "Redmine Project")
+      Rails.logger.info "[GITLAB BADGE] Finding badge '#{badge_name}' in group #{gitlab_group_id}"
+
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{gitlab_group_id}/badges"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.get(endpoint,
+          headers: headers,
+          timeout: 30
+        )
+
+        if response.success?
+          badges = JSON.parse(response.body)
+          badge = badges.find { |b| b['name'] == badge_name }
+          if badge
+            Rails.logger.info "[GITLAB BADGE] Found badge ID: #{badge['id']}"
+            badge
+          else
+            Rails.logger.info "[GITLAB BADGE] Badge not found in group #{gitlab_group_id}"
+            nil
+          end
+        else
+          Rails.logger.error "[GITLAB BADGE] Failed to list badges: #{response.body}"
+          nil
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB BADGE] Error finding badge: #{e.message}"
+        nil
+      end
+    end
+
+    # Delete a badge from a GitLab group
+    # @param gitlab_group_id [Integer] GitLab group ID
+    # @param badge_id [Integer] Badge ID
+    # @return [Hash] Result with success status
+    def delete_badge_from_group(gitlab_group_id, badge_id)
+      Rails.logger.info "[GITLAB BADGE] Deleting badge #{badge_id} from group #{gitlab_group_id}"
+
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{gitlab_group_id}/badges/#{badge_id}"
+      headers = { 'Private-Token' => @gitlab_token }
+
+      begin
+        response = self.class.delete(endpoint,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB BADGE] Delete response status: #{response.code}"
+
+        if response.success? || response.code == 404
+          # 404 means badge already deleted - that's okay
+          Rails.logger.info "[GITLAB BADGE] Badge deleted successfully"
+          { success: true, message: 'Badge deleted successfully' }
+        else
+          Rails.logger.error "[GITLAB BADGE] Failed to delete badge: #{response.body}"
+          { success: false, error: response.body }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB BADGE] Error deleting badge: #{e.message}"
+        { success: false, error: e.message }
+      end
+    end
+
+    # Remove Redmine badge from a GitLab group (find and delete)
+    # @param gitlab_group_id [Integer] GitLab group ID
+    # @return [Hash] Result with success status
+    def remove_redmine_badge_from_group(gitlab_group_id)
+      Rails.logger.info "[GITLAB BADGE] Removing Redmine badge from group #{gitlab_group_id}"
+
+      badge = find_redmine_badge_in_group(gitlab_group_id)
+      return { success: true, message: 'Badge not found (already removed)' } unless badge
+
+      delete_badge_from_group(gitlab_group_id, badge['id'])
+    end
+
     private
 
     # Find GitLab user by Casdoor ID (most reliable method)

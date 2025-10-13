@@ -6,7 +6,8 @@ module RedmineGitlabIntegration
       def self.included(base)
         base.class_eval do
           after_create :create_gitlab_project_and_repository_with_debug
-          
+          before_destroy :remove_gitlab_badge_before_destroy
+
           Rails.logger.info "[GITLAB DEBUG] Enhanced ProjectPatch loaded and applied to Project model"
         end
         Rails.logger.info "[GITLAB DEBUG] ProjectPatch included in Project model"
@@ -366,13 +367,44 @@ module RedmineGitlabIntegration
           # Fallback to project path if hashed storage fails
           fallback_path = "/var/opt/gitlab/git-data/repositories/#{gitlab_project['path_with_namespace']}.git"
           Rails.logger.info "[GITLAB DEBUG] Fallback path: #{fallback_path}"
-          
+
           return local_path
-          
+
         rescue => e
           Rails.logger.error "[GITLAB DEBUG] Error calculating repository path: #{e.message}"
           # Return a basic fallback path
           return "/var/opt/gitlab/git-data/repositories/#{self.identifier}.git"
+        end
+      end
+
+      # Remove GitLab badge when project is being destroyed
+      def remove_gitlab_badge_before_destroy
+        begin
+          Rails.logger.info "[GITLAB BADGE] Project being destroyed: #{self.name} (ID: #{self.id})"
+
+          # Find GitLab mapping
+          mapping = GitlabMapping.find_by(redmine_project_id: self.id)
+          unless mapping&.gitlab_group_id
+            Rails.logger.info "[GITLAB BADGE] No GitLab mapping found, skipping badge removal"
+            return
+          end
+
+          gitlab_group_id = mapping.gitlab_group_id
+          Rails.logger.info "[GITLAB BADGE] Removing badge from GitLab group #{gitlab_group_id}"
+
+          # Remove badge from GitLab group
+          gitlab_service = RedmineGitlabIntegration::GitlabService.new
+          result = gitlab_service.remove_redmine_badge_from_group(gitlab_group_id)
+
+          if result[:success]
+            Rails.logger.info "[GITLAB BADGE] Successfully removed badge from group #{gitlab_group_id}"
+          else
+            Rails.logger.error "[GITLAB BADGE] Failed to remove badge: #{result[:error]}"
+          end
+
+        rescue => e
+          Rails.logger.error "[GITLAB BADGE] Error removing badge on project destroy: #{e.message}"
+          Rails.logger.error e.backtrace.first(3).join("\n")
         end
       end
     end

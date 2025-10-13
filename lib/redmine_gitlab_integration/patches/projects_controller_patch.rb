@@ -88,6 +88,7 @@ module RedmineGitlabIntegration
         Rails.logger.info "[GITLAB DEBUG] Saving GitLab group mapping: project=#{@project.id}, group=#{@gitlab_group_id}"
 
         mapping = GitlabMapping.find_or_initialize_by(redmine_project_id: @project.id)
+        old_group_id = mapping.gitlab_group_id # Save old group ID for badge removal
         mapping.gitlab_group_id = @gitlab_group_id
         mapping.mapping_type = 'group'
 
@@ -100,13 +101,22 @@ module RedmineGitlabIntegration
         if mapping.save
           Rails.logger.info "[GITLAB DEBUG] Successfully saved GitLab mapping: #{mapping.inspect}"
 
-          # Add Redmine badge to GitLab group for easy navigation back
+          # Handle badge updates
           begin
             gitlab_service = RedmineGitlabIntegration::GitlabService.new
+
+            # If group changed, remove badge from old group
+            if old_group_id.present? && old_group_id != @gitlab_group_id.to_i
+              Rails.logger.info "[GITLAB BADGE] Group changed from #{old_group_id} to #{@gitlab_group_id}, removing old badge"
+              remove_result = gitlab_service.remove_redmine_badge_from_group(old_group_id)
+              Rails.logger.info "[GITLAB BADGE] Old badge removal result: #{remove_result.inspect}"
+            end
+
+            # Add badge to new/current group
             badge_result = gitlab_service.add_redmine_badge_to_group(@gitlab_group_id.to_i, @project)
             Rails.logger.info "[GITLAB DEBUG] Badge result: #{badge_result.inspect}"
           rescue => e
-            Rails.logger.error "[GITLAB DEBUG] Error adding badge: #{e.message}"
+            Rails.logger.error "[GITLAB DEBUG] Error managing badges: #{e.message}"
           end
         else
           Rails.logger.error "[GITLAB DEBUG] Failed to save GitLab mapping: #{mapping.errors.full_messages.join(', ')}"
