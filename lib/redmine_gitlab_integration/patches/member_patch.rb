@@ -1,5 +1,12 @@
 require_dependency 'member'
 
+# Ensure SyncMemberJob is loaded
+begin
+  require File.expand_path('../../../../app/jobs/sync_member_job', __FILE__)
+rescue LoadError => e
+  Rails.logger.error "[GITLAB PLUGIN] Failed to load SyncMemberJob: #{e.message}"
+end
+
 module RedmineGitlabIntegration
   module Patches
     module MemberPatch
@@ -8,8 +15,6 @@ module RedmineGitlabIntegration
           after_create :sync_member_to_gitlab
           after_destroy :sync_member_removal_from_gitlab
           after_update :sync_member_update_to_gitlab
-
-          Rails.logger.info "[GITLAB MEMBER PATCH] Member callbacks registered"
         end
       end
 
@@ -19,6 +24,7 @@ module RedmineGitlabIntegration
         return unless user&.active? && project
 
         begin
+          Rails.logger.info "[GITLAB MEMBER SYNC] ========== CALLBACK FIRED =========="
           Rails.logger.info "[GITLAB MEMBER SYNC] Member added: #{user.login} to project #{project.name}"
 
           # Check if project has GitLab integration
@@ -29,29 +35,25 @@ module RedmineGitlabIntegration
           end
 
           gitlab_group_id = gitlab_mapping.gitlab_group_id
-          Rails.logger.info "[GITLAB MEMBER SYNC] Syncing to GitLab group #{gitlab_group_id}"
+          Rails.logger.info "[GITLAB MEMBER SYNC] Queueing sync to GitLab group #{gitlab_group_id}"
 
           # Calculate appropriate access level for user across all projects in this group
           access_level = calculate_user_access_level_for_group(user, gitlab_group_id)
 
-          # Add or update member in GitLab
-          gitlab_service = RedmineGitlabIntegration::GitlabService.new
-          gitlab_user_id = gitlab_service.find_gitlab_user_id(user)
-
-          unless gitlab_user_id
-            Rails.logger.warn "[GITLAB MEMBER SYNC] No GitLab user found for #{user.login}"
-            return
+          # Execute asynchronously in a background thread
+          Thread.new do
+            begin
+              SyncMemberJob.new.perform('add', gitlab_group_id, user.id, access_level)
+              Rails.logger.info "[GITLAB MEMBER SYNC] Completed async add for user #{user.login}"
+            rescue => e
+              Rails.logger.error "[GITLAB MEMBER SYNC] Error in async add: #{e.message}"
+              Rails.logger.error e.backtrace.first(3).join("\n")
+            end
           end
-
-          result = gitlab_service.add_group_member(gitlab_group_id, gitlab_user_id, access_level)
-          if result[:success]
-            Rails.logger.info "[GITLAB MEMBER SYNC] Successfully synced member #{user.login} to group #{gitlab_group_id}"
-          else
-            Rails.logger.error "[GITLAB MEMBER SYNC] Failed to sync member: #{result[:error]}"
-          end
+          Rails.logger.info "[GITLAB MEMBER SYNC] Started async add for user #{user.login} with access level #{access_level}"
 
         rescue => e
-          Rails.logger.error "[GITLAB MEMBER SYNC] Error syncing member addition: #{e.message}"
+          Rails.logger.error "[GITLAB MEMBER SYNC] Error queueing member sync: #{e.message}"
           Rails.logger.error e.backtrace.first(3).join("\n")
         end
       end
@@ -73,35 +75,33 @@ module RedmineGitlabIntegration
 
           # Check if user still has access to this GitLab group through other projects
           if user_has_access_to_group?(user, gitlab_group_id, exclude_project: project)
-            # User still has access via other projects - recalculate access level
-            new_access_level = calculate_user_access_level_for_group(user, gitlab_group_id, exclude_project: project)
-            Rails.logger.info "[GITLAB MEMBER SYNC] User still has access via other projects, updating access level to #{new_access_level}"
-
-            gitlab_service = RedmineGitlabIntegration::GitlabService.new
-            gitlab_user_id = gitlab_service.find_gitlab_user_id(user)
-
-            if gitlab_user_id
-              gitlab_service.update_group_member(gitlab_group_id, gitlab_user_id, new_access_level)
-            end
-          else
-            # User has no remaining access to this group - remove them
-            Rails.logger.info "[GITLAB MEMBER SYNC] User has no remaining access to group #{gitlab_group_id}, removing"
-
-            gitlab_service = RedmineGitlabIntegration::GitlabService.new
-            gitlab_user_id = gitlab_service.find_gitlab_user_id(user)
-
-            if gitlab_user_id
-              result = gitlab_service.remove_group_member(gitlab_group_id, gitlab_user_id)
-              if result[:success]
-                Rails.logger.info "[GITLAB MEMBER SYNC] Successfully removed member #{user.login} from group #{gitlab_group_id}"
-              else
-                Rails.logger.error "[GITLAB MEMBER SYNC] Failed to remove member: #{result[:error]}"
+            # User still has access via other projects - recalculate their access level
+            Thread.new do
+              begin
+                SyncMemberJob.new.perform('recalculate', gitlab_group_id, user.id, nil, project.id)
+                Rails.logger.info "[GITLAB MEMBER SYNC] Completed async recalculate for user #{user.login}"
+              rescue => e
+                Rails.logger.error "[GITLAB MEMBER SYNC] Error in async recalculate: #{e.message}"
+                Rails.logger.error e.backtrace.first(3).join("\n")
               end
             end
+            Rails.logger.info "[GITLAB MEMBER SYNC] Started async recalculate for user #{user.login}"
+          else
+            # User has no remaining access to this group - remove from GitLab
+            Thread.new do
+              begin
+                SyncMemberJob.new.perform('remove', gitlab_group_id, user.id)
+                Rails.logger.info "[GITLAB MEMBER SYNC] Completed async removal for user #{user.login}"
+              rescue => e
+                Rails.logger.error "[GITLAB MEMBER SYNC] Error in async removal: #{e.message}"
+                Rails.logger.error e.backtrace.first(3).join("\n")
+              end
+            end
+            Rails.logger.info "[GITLAB MEMBER SYNC] Started async removal for user #{user.login} from group #{gitlab_group_id}"
           end
 
         rescue => e
-          Rails.logger.error "[GITLAB MEMBER SYNC] Error syncing member removal: #{e.message}"
+          Rails.logger.error "[GITLAB MEMBER SYNC] Error queueing member removal sync: #{e.message}"
           Rails.logger.error e.backtrace.first(3).join("\n")
         end
       end
@@ -124,26 +124,21 @@ module RedmineGitlabIntegration
 
           # Calculate new access level across all projects
           new_access_level = calculate_user_access_level_for_group(user, gitlab_group_id)
-          Rails.logger.info "[GITLAB MEMBER SYNC] Updating access level to #{new_access_level}"
 
-          # Update member in GitLab
-          gitlab_service = RedmineGitlabIntegration::GitlabService.new
-          gitlab_user_id = gitlab_service.find_gitlab_user_id(user)
-
-          unless gitlab_user_id
-            Rails.logger.warn "[GITLAB MEMBER SYNC] No GitLab user found for #{user.login}"
-            return
+          # Execute asynchronously in a background thread
+          Thread.new do
+            begin
+              SyncMemberJob.new.perform('update', gitlab_group_id, user.id, new_access_level)
+              Rails.logger.info "[GITLAB MEMBER SYNC] Completed async update for user #{user.login}"
+            rescue => e
+              Rails.logger.error "[GITLAB MEMBER SYNC] Error in async update: #{e.message}"
+              Rails.logger.error e.backtrace.first(3).join("\n")
+            end
           end
-
-          result = gitlab_service.update_group_member(gitlab_group_id, gitlab_user_id, new_access_level)
-          if result[:success]
-            Rails.logger.info "[GITLAB MEMBER SYNC] Successfully updated member #{user.login} access level"
-          else
-            Rails.logger.error "[GITLAB MEMBER SYNC] Failed to update member: #{result[:error]}"
-          end
+          Rails.logger.info "[GITLAB MEMBER SYNC] Started async update for user #{user.login} to access level #{new_access_level}"
 
         rescue => e
-          Rails.logger.error "[GITLAB MEMBER SYNC] Error syncing member update: #{e.message}"
+          Rails.logger.error "[GITLAB MEMBER SYNC] Error queueing member update sync: #{e.message}"
           Rails.logger.error e.backtrace.first(3).join("\n")
         end
       end
@@ -205,7 +200,8 @@ module RedmineGitlabIntegration
   end
 end
 
-# Apply the patch
+# Apply the patch to Member model
 unless Member.included_modules.include?(RedmineGitlabIntegration::Patches::MemberPatch)
   Member.send(:include, RedmineGitlabIntegration::Patches::MemberPatch)
+  Rails.logger.info "[GITLAB PLUGIN] Member patch applied from member_patch.rb - callbacks registered"
 end

@@ -1,0 +1,31 @@
+# GoodJob configuration for background job processing
+# This provides a dashboard and queue management for ActiveJob tasks
+
+Rails.application.configure do
+  # Use GoodJob as the ActiveJob queue adapter
+  config.active_job.queue_adapter = :good_job
+
+  # Configure GoodJob settings
+  config.good_job = ActiveSupport::OrderedOptions.new
+
+  # Run jobs asynchronously (not inline) for better performance
+  config.good_job.execution_mode = :async
+
+  # Enable cron for scheduled jobs (if needed in future)
+  config.good_job.enable_cron = true
+
+  # Cleanup old job records after 7 days
+  config.good_job.cleanup_preserved_jobs_before_seconds_ago = 7.days.to_i
+
+  # Preserve finished jobs for observability
+  config.good_job.preserve_job_records = true
+
+  # Set poll interval for async execution (default: 5 seconds)
+  config.good_job.poll_interval = 5
+
+  # Maximum number of concurrent threads (default: 5)
+  config.good_job.max_threads = 5
+
+  # Dashboard settings
+  config.good_job.dashboard_default_locale = :en
+end

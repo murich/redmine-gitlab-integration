@@ -101,22 +101,19 @@ module RedmineGitlabIntegration
         if mapping.save
           Rails.logger.info "[GITLAB DEBUG] Successfully saved GitLab mapping: #{mapping.inspect}"
 
-          # Handle badge updates
+          # Handle badge updates via background job
           begin
-            gitlab_service = RedmineGitlabIntegration::GitlabService.new
-
-            # If group changed, remove badge from old group
+            # If group changed, migrate badge from old group to new group
             if old_group_id.present? && old_group_id != @gitlab_group_id.to_i
-              Rails.logger.info "[GITLAB BADGE] Group changed from #{old_group_id} to #{@gitlab_group_id}, removing old badge"
-              remove_result = gitlab_service.remove_redmine_badge_from_group(old_group_id)
-              Rails.logger.info "[GITLAB BADGE] Old badge removal result: #{remove_result.inspect}"
+              Rails.logger.info "[GITLAB BADGE] Group changed from #{old_group_id} to #{@gitlab_group_id}, queuing badge migration"
+              ManageGroupBadgeJob.perform_later('migrate', @gitlab_group_id.to_i, @project.id, old_group_id)
+            else
+              # Just add/update badge for current group
+              ManageGroupBadgeJob.perform_later('add', @gitlab_group_id.to_i, @project.id)
             end
-
-            # Add badge to new/current group
-            badge_result = gitlab_service.add_redmine_badge_to_group(@gitlab_group_id.to_i, @project)
-            Rails.logger.info "[GITLAB DEBUG] Badge result: #{badge_result.inspect}"
+            Rails.logger.info "[GITLAB BADGE] Queued badge management job"
           rescue => e
-            Rails.logger.error "[GITLAB DEBUG] Error managing badges: #{e.message}"
+            Rails.logger.error "[GITLAB DEBUG] Error queuing badge job: #{e.message}"
           end
         else
           Rails.logger.error "[GITLAB DEBUG] Failed to save GitLab mapping: #{mapping.errors.full_messages.join(', ')}"
@@ -127,13 +124,13 @@ module RedmineGitlabIntegration
         gitlab_service = RedmineGitlabIntegration::GitlabService.new
 
         if @gitlab_project_id == 'new'
-          # Create new GitLab project (without README - repo is created empty)
+          # Create new GitLab project (with README for immediate repository initialization)
           Rails.logger.info "[GITLAB DEBUG] Creating new GitLab project in group #{@gitlab_group_id} (type: #{@gitlab_group_id.class})"
           result = gitlab_service.create_project_in_group(
             @gitlab_group_id.to_i,  # Ensure it's an integer
             @project.name,
             @project.description || '',
-            false,  # initialize_with_readme: false (empty repo)
+            true,  # initialize_with_readme: true (creates repo with README)
             @project.is_public?
           )
 
@@ -141,12 +138,17 @@ module RedmineGitlabIntegration
             mapping.gitlab_project_id = result[:project_id]
             Rails.logger.info "[GITLAB DEBUG] Created new GitLab project: #{result[:project_id]}"
 
-            # Configure Redmine integration on GitLab project
+            # Configure Redmine integration via background jobs (project + group level)
             begin
-              integration_result = gitlab_service.configure_redmine_integration(result[:project_id], @project)
-              Rails.logger.info "[GITLAB INTEGRATION] Setup result: #{integration_result.inspect}"
+              # Project-level integration
+              ConfigureProjectIntegrationJob.perform_later(result[:project_id], @project.id)
+              Rails.logger.info "[GITLAB INTEGRATION] Queued project integration job"
+
+              # Group-level integration
+              ConfigureGroupIntegrationJob.perform_later(@gitlab_group_id.to_i, @project.id)
+              Rails.logger.info "[GITLAB INTEGRATION] Queued group integration job"
             rescue => e
-              Rails.logger.error "[GITLAB INTEGRATION] Error setting up integration: #{e.message}"
+              Rails.logger.error "[GITLAB INTEGRATION] Error queuing integration jobs: #{e.message}"
             end
 
             # Fetch the created project to get its creation timestamp from GitLab
@@ -170,12 +172,20 @@ module RedmineGitlabIntegration
           mapping.gitlab_project_id = @gitlab_project_id.to_i
           Rails.logger.info "[GITLAB DEBUG] Linking to existing GitLab project: #{@gitlab_project_id}"
 
-          # Configure Redmine integration on GitLab project
+          # Configure Redmine integration via background jobs (project + group level)
           begin
-            integration_result = gitlab_service.configure_redmine_integration(@gitlab_project_id.to_i, @project)
-            Rails.logger.info "[GITLAB INTEGRATION] Setup result: #{integration_result.inspect}"
+            # Project-level integration
+            ConfigureProjectIntegrationJob.perform_later(@gitlab_project_id.to_i, @project.id)
+            Rails.logger.info "[GITLAB INTEGRATION] Queued project integration job for existing project"
+
+            # Group-level integration (get group from mapping)
+            group_info = GitlabMapping.find_inherited_group(@project)
+            if group_info
+              ConfigureGroupIntegrationJob.perform_later(group_info[:group_id], @project.id)
+              Rails.logger.info "[GITLAB INTEGRATION] Queued group integration job"
+            end
           rescue => e
-            Rails.logger.error "[GITLAB INTEGRATION] Error setting up integration: #{e.message}"
+            Rails.logger.error "[GITLAB INTEGRATION] Error queuing integration jobs: #{e.message}"
           end
 
           # Fetch the existing project to get its creation timestamp from GitLab

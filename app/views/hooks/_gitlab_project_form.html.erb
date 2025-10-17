@@ -210,6 +210,11 @@
             gitlabProjectDropdown.add(option);
           });
 
+          // If no orphan projects available, default to "Create new project"
+          if (data.projects.length === 0 && (!selectedProjectId || selectedProjectId === '' || selectedProjectId === 'null')) {
+            gitlabProjectDropdown.value = 'new';
+          }
+
           // Restore previously selected project if it exists in the list
           if (selectedProjectId && selectedProjectId !== '' && selectedProjectId !== 'null') {
             gitlabProjectDropdown.value = selectedProjectId;
@@ -248,6 +253,9 @@
       newOption.value = 'new';
       newOption.text = '➕ Create new project';
       gitlabProjectDropdown.add(newOption);
+
+      // Default to "Create new project" for new groups
+      gitlabProjectDropdown.value = 'new';
 
       gitlabProjectField.style.display = 'block';
 

@@ -177,8 +177,9 @@ module RedmineGitlabIntegration
         name: project_name,
         description: description,
         visibility: is_public ? 'public' : 'internal',
-        initialize_with_readme: initialize_with_readme,
-        namespace_id: group_id
+        initialize_with_readme: true,  # Always create with README
+        namespace_id: group_id,
+        issues_enabled: false  # Disable GitLab issues since we use Redmine for issue tracking
       }
 
       headers = {
@@ -198,6 +199,10 @@ module RedmineGitlabIntegration
 
         if response.success?
           result = JSON.parse(response.body)
+
+          # Initialize the repository with an empty commit to force .git directory creation
+          # initialize_empty_repository(result['id'])  # Disabled - using initialize_with_readme instead
+
           {
             success: true,
             project_id: result['id'],
@@ -232,8 +237,9 @@ module RedmineGitlabIntegration
         name: project_name,
         description: description,
         visibility: is_public ? 'public' : 'internal',
-        initialize_with_readme: initialize_with_readme,
-        namespace_id: get_namespace_id
+        initialize_with_readme: true,  # Always create with README
+        namespace_id: get_namespace_id,
+        issues_enabled: false  # Disable GitLab issues since we use Redmine for issue tracking
       }
 
       # Headers with authentication
@@ -254,6 +260,10 @@ module RedmineGitlabIntegration
 
         if response.success?
           result = JSON.parse(response.body)
+
+          # Initialize the repository with an empty commit to force .git directory creation
+          # initialize_empty_repository(result['id'])  # Disabled - using initialize_with_readme instead
+
           {
             success: true,
             project_id: result['id'],
@@ -276,7 +286,55 @@ module RedmineGitlabIntegration
         }
       end
     end
-    
+
+    # Initialize an empty repository by creating an initial commit
+    # This forces GitLab to create the physical .git directory on disk
+    # @param project_id [Integer] GitLab project ID
+    # @return [Hash] Result with success status
+    def initialize_empty_repository(project_id)
+      Rails.logger.info "[GITLAB API] Initializing empty repository for project #{project_id}"
+
+      endpoint = "#{@gitlab_url}/api/v4/projects/#{project_id}/repository/commits"
+
+      params = {
+        branch: 'main',
+        commit_message: 'Initial commit',
+        actions: [
+          {
+            action: 'create',
+            file_path: '.gitkeep',
+            content: ''
+          }
+        ]
+      }
+
+      headers = {
+        'Private-Token' => @gitlab_token,
+        'Content-Type' => 'application/json'
+      }
+
+      begin
+        response = self.class.post(endpoint,
+          body: params.to_json,
+          headers: headers,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB API] Initialize repo response status: #{response.code}"
+
+        if response.success?
+          Rails.logger.info "[GITLAB API] Successfully initialized repository with .gitkeep"
+          { success: true, message: 'Repository initialized' }
+        else
+          Rails.logger.warn "[GITLAB API] Failed to initialize repository: #{response.body}"
+          { success: false, error: response.body }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB API] Error initializing repository: #{e.message}"
+        { success: false, error: e.message }
+      end
+    end
+
     # Find GitLab user ID for a Redmine user
     # Uses three-tier matching: 1) Casdoor ID, 2) Username, 3) Email
     # Results are cached in gitlab_user_mappings table
@@ -495,8 +553,8 @@ module RedmineGitlabIntegration
     def add_redmine_badge_to_group(gitlab_group_id, redmine_project)
       Rails.logger.info "[GITLAB BADGE] Adding Redmine link badge to group #{gitlab_group_id}"
 
-      # Get Redmine external URL from environment
-      redmine_url = ENV['REDMINE_EXTERNAL_URL'] || 'http://localhost:8087'
+      # Get Redmine external URL from environment (check EXTERNAL first per CLAUDE.md, then BASE for backward compatibility)
+      redmine_url = ENV['REDMINE_EXTERNAL_URL'].presence || ENV['REDMINE_BASE_URL'].presence || 'http://localhost:8087'
 
       # Build badge parameters
       badge_name = "Redmine Project"
@@ -548,7 +606,8 @@ module RedmineGitlabIntegration
     def add_redmine_badge_to_project(gitlab_project_id, redmine_project)
       Rails.logger.info "[GITLAB BADGE] Adding Redmine link badge to project #{gitlab_project_id}"
 
-      redmine_url = ENV['REDMINE_EXTERNAL_URL'] || 'http://localhost:8087'
+      # Check EXTERNAL first per CLAUDE.md, then BASE for backward compatibility
+      redmine_url = ENV['REDMINE_EXTERNAL_URL'].presence || ENV['REDMINE_BASE_URL'].presence || 'http://localhost:8087'
 
       badge_name = "Redmine Project"
       badge_link = "#{redmine_url}/projects/#{redmine_project.identifier}"
@@ -678,7 +737,8 @@ module RedmineGitlabIntegration
     def configure_redmine_integration(gitlab_project_id, redmine_project)
       Rails.logger.info "[GITLAB INTEGRATION] Configuring Redmine integration for GitLab project #{gitlab_project_id}"
 
-      redmine_url = ENV['REDMINE_EXTERNAL_URL'].presence || 'http://localhost:8087'
+      # Check EXTERNAL first per CLAUDE.md, then BASE for backward compatibility
+      redmine_url = ENV['REDMINE_EXTERNAL_URL'].presence || ENV['REDMINE_BASE_URL'].presence || 'http://localhost:8087'
       endpoint = "#{@gitlab_url}/api/v4/projects/#{gitlab_project_id}/integrations/redmine"
 
       # Prepare integration parameters
@@ -727,6 +787,68 @@ module RedmineGitlabIntegration
           success: false,
           error: e.message,
           message: "Exception occurred during integration setup"
+        }
+      end
+    end
+
+    # Configure Redmine integration on GitLab GROUP (not just project)
+    # This allows group-level settings to be inherited by all projects in the group
+    # @param gitlab_group_id [Integer] GitLab group ID
+    # @param redmine_project [Project] Redmine project instance
+    # @return [Hash] Result with success status
+    def configure_group_redmine_integration(gitlab_group_id, redmine_project)
+      Rails.logger.info "[GITLAB INTEGRATION] Configuring Redmine integration for GitLab group #{gitlab_group_id}"
+
+      # Check EXTERNAL first per CLAUDE.md, then BASE for backward compatibility
+      redmine_url = ENV['REDMINE_EXTERNAL_URL'].presence || ENV['REDMINE_BASE_URL'].presence || 'http://localhost:8087'
+      endpoint = "#{@gitlab_url}/api/v4/groups/#{gitlab_group_id}/integrations/redmine"
+
+      # Prepare integration parameters (same as project-level)
+      params = {
+        project_url: "#{redmine_url}/projects/#{redmine_project.identifier}",
+        issues_url: "#{redmine_url}/issues/:id",
+        new_issue_url: "#{redmine_url}/projects/#{redmine_project.identifier}/issues/new"
+      }
+
+      headers = {
+        'Private-Token' => @gitlab_token,
+        'Content-Type' => 'application/json'
+      }
+
+      Rails.logger.info "[GITLAB INTEGRATION] Group request params: #{params.inspect}"
+
+      begin
+        response = self.class.put(endpoint,
+          headers: headers,
+          body: params.to_json,
+          timeout: 30
+        )
+
+        Rails.logger.info "[GITLAB INTEGRATION] Group response status: #{response.code}"
+        Rails.logger.info "[GITLAB INTEGRATION] Group response body: #{response.body}"
+
+        if response.code.to_i.between?(200, 299)
+          Rails.logger.info "[GITLAB INTEGRATION] Successfully configured group-level Redmine integration"
+          {
+            success: true,
+            message: "Group-level Redmine integration configured successfully",
+            project_url: params[:project_url]
+          }
+        else
+          Rails.logger.error "[GITLAB INTEGRATION] Failed to configure group integration: #{response.body}"
+          {
+            success: false,
+            error: "HTTP #{response.code}: #{response.body}",
+            message: "Failed to configure group-level Redmine integration"
+          }
+        end
+      rescue => e
+        Rails.logger.error "[GITLAB INTEGRATION] Error configuring group Redmine integration: #{e.message}"
+        Rails.logger.error e.backtrace.first(3).join("\n")
+        {
+          success: false,
+          error: e.message,
+          message: "Exception occurred during group integration setup"
         }
       end
     end
